@@ -36,12 +36,72 @@
 | `prompts/` | 每个核心步骤对应的 prompt 模板，要求结构化输出 |
 | `apps/web-ui` | React 或 Svelte 单页应用，包含：聊天窗口、课程目录侧栏、章节内容区（Markdown + KaTeX + Monaco Editor）、简单状态路由 |
 
+### 4.1.1 Phase 1 各模块交付清单
+
+| 模块 | Phase 1 交付 | Phase 1 不交付 |
+|------|-------------|---------------|
+| `schemas/` | LearningGoal、FeasibilityResult、UserProfile、CurriculumPlan、Chapter、Message、ChapterProgress 的 JSON Schema | 插件协议（PluginManifest、PluginRequest）、沙箱协议（SandboxRequest、EvaluationResult）、Bevy 场景协议（SceneSpec） |
+| `crates/` | `agent-core`（单一 crate，包含 HTTP 服务、状态机、LLM 调用、prompt 加载） | `storage`、`plugin-host`、`assessment-engine`、`tool-router`、`llm-gateway` |
+| `prompts/` | feasibility_check、profile_collection、curriculum_planning、chapter_teaching、question_answering 模板 | 题目生成、答案评估、插件交互模板 |
+| `apps/` | `web-ui`（React/Svelte SPA，聊天界面、课程目录、章节内容展示） | `desktop`（Tauri）、`bevy-viewer`（Bevy 渲染） |
+| `sandboxes/` | 无（Phase 1 不运行用户代码） | Docker 沙箱、代码编译执行环境 |
+| `tests/` | 核心流程集成测试（目标判断、画像采集、路径规划、章节教学） | 沙箱测试、插件契约测试、E2E 自动化测试 |
+| `tools/` | schema-validator（JSON Schema 校验工具） | prompt-tester、代码生成工具 |
+| `assets/` | 基础 UI 图标、字体（如需要） | 场景背景、3D 模型、音频 |
+| `plugins/` | 无（Phase 3 功能） | 所有插件相关功能 |
+| `docs-internal/` | 初始 ADR（架构决策记录） | 完整威胁模型、实验记录 |
+
 ### 4.2 技术栈
 
 - **前端**：React 18+（或 Svelte 5），Vite，Monaco Editor，KaTeX，react-markdown。
 - **后端**：Rust，Axum，Tokio，Serde，reqwest（LLM HTTP client），tracing。
 - **协议**：REST + SSE（流式），请求/响应体为 JSON Schema 校验。
 - **运行方式**：`cargo run` 启动后端，`npm run dev` 启动前端，浏览器访问 `localhost:5173`。
+
+#### 4.2.1 完整技术栈清单
+
+**前端技术栈：**
+- React 18+ 或 Svelte 5（UI 框架）
+- Vite（构建工具）
+- Monaco Editor（代码编辑器）
+- KaTeX（数学公式渲染）
+- react-markdown（Markdown 渲染）
+- TypeScript（类型安全）
+
+**后端技术栈：**
+- Rust（核心语言）
+- Axum（HTTP 框架）
+- Tokio（异步运行时）
+- Serde（序列化/反序列化）
+- reqwest（HTTP 客户端，用于 LLM 调用）
+- tracing（日志和追踪）
+- thiserror（错误处理）
+
+**协议与数据格式：**
+- REST API（HTTP 请求/响应）
+- SSE（Server-Sent Events，流式输出）
+- JSON Schema（数据校验）
+- JSON（数据交换格式）
+
+**开发工具（Phase 1）：**
+- Cargo（Rust 包管理）
+- npm/pnpm（前端包管理）
+- JSON Schema 校验工具
+
+**测试工具（Phase 1）：**
+- Rust 内置测试框架
+- 集成测试（HTTP API 测试）
+
+**Phase 2+ 扩展技术栈：**
+- Docker（沙箱隔离）
+- SQLite/PostgreSQL（数据持久化，通过 SQLx）
+- Playwright（E2E 测试）
+
+**Phase 3+ 扩展技术栈：**
+- Tauri 2（桌面应用框架）
+- Bevy（游戏引擎，用于渲染层）
+- Wasmtime（WASM 运行时）
+- WASM Component Model（插件系统）
 
 ### 4.3 明确不包含的内容
 
@@ -89,34 +149,73 @@ schemas/  →  crates/agent-core  →  prompts/  →  apps/web-ui
 - **sandboxes/**：依赖 schemas 中的 ToolRequest/EvaluationResult 和 agent-core 的工具调度接口。
 - **plugins/**：依赖 schemas 和 agent-core 的插件宿主接口。
 
+### 5.1 Crate 划分方案
+
+**Phase 1：单一 Crate**
+- `agent-core`：包含所有核心逻辑（HTTP 服务、状态机、LLM 调用、prompt 加载）
+- 理由：Phase 1 聚焦快速验证核心流程，单一 crate 便于开发和调试
+
+**Phase 2：功能拆分**
+- `agent-core`：保留核心编排逻辑、状态机、HTTP API
+- `storage`：数据持久化（SQLite/PostgreSQL）、用户数据、学习进度
+- `assessment-engine`：练习题生成、答案评估、评分逻辑
+- 理由：Phase 2 引入持久化和评估功能，拆分可提高模块独立性
+
+**Phase 3：进一步拆分**
+- `plugin-host`：WASM 插件加载、权限管理、生命周期管理
+- `tool-router`：工具调度、沙箱请求路由
+- `llm-gateway`：LLM 调用封装、重试、缓存、多模型支持
+- `bevy-protocol`：Bevy 场景协议实现、与 Bevy 渲染层通信
+- 理由：Phase 3 功能复杂度增加，细粒度拆分便于维护和测试
+
+**Crate 依赖关系：**
+```
+schemas (无依赖)
+  ↓
+agent-core → storage
+  ↓           ↓
+assessment-engine
+  ↓
+plugin-host → tool-router
+  ↓
+llm-gateway
+  ↓
+bevy-protocol
+```
+
 ## 6. 约束与禁止事项
+
+**约束类型说明：**
+- **[Global]** 全局约束：适用于所有模块、所有阶段
+- **[Phase X]** 阶段约束：特定阶段的约束
+- **[Module]** 模块约束：特定模块的约束（详见各模块文档）
 
 ### 6.1 全阶段适用（硬约束）
 
-- 不允许把所有逻辑塞进前端。
-- 不允许让 LLM 伪造计算结果、编译结果或测试结果。
-- 不允许把用户隐私、学习记录、API Key 写入日志或提交到仓库。
-- 不允许在没有沙箱的情况下运行用户提交的代码。（Phase 1 不运行用户代码，Phase 2 起必须通过沙箱）
-- 不允许在缺少权限边界的情况下加载第三方插件。（Phase 3 起适用）
-- 不允许插件直接执行宿主系统命令。
-- 不允许 Bevy 直接承担完整学习产品 UI。
+- **[Global]** 不允许把所有逻辑塞进前端。
+- **[Global]** 不允许让 LLM 伪造计算结果、编译结果或测试结果。
+- **[Global]** 不允许把用户隐私、学习记录、API Key 写入日志或提交到仓库。
+- **[Global]** 不允许在没有沙箱的情况下运行用户提交的代码。（Phase 1 不运行用户代码，Phase 2 起必须通过沙箱）
+- **[Global]** 不允许在缺少权限边界的情况下加载第三方插件。（Phase 3 起适用）
+- **[Global]** 不允许插件直接执行宿主系统命令。
+- **[Global]** 不允许 Bevy 直接承担完整学习产品 UI。
 
 ### 6.2 Phase 1 放宽约束
 
 Phase 1 以快速验证核心流程为目标，以下行为**允许**：
 
-- 允许创建探索性 demo、原型和验证代码（验证后归档到 `docs-internal/experiments/` 或删除）。
-- 允许使用内存存储或 JSON 文件替代数据库。
-- 允许 agent-core 和 web-ui 运行在同一台机器上，不做多租户隔离。
-- 允许 prompt 模板在调试阶段内联在代码中，但必须标注 `TODO: extract to prompts/`。
+- **[Phase 1]** 允许创建探索性 demo、原型和验证代码（验证后归档到 `docs-internal/experiments/` 或删除）。
+- **[Phase 1]** 允许使用内存存储或 JSON 文件替代数据库。
+- **[Phase 1]** 允许 agent-core 和 web-ui 运行在同一台机器上，不做多租户隔离。
+- **[Phase 1]** 允许 prompt 模板在调试阶段内联在代码中，但必须标注 `TODO: extract to prompts/`。
 
 ### 6.3 各阶段特有约束
 
 | 阶段 | 禁止事项 |
 |------|---------|
-| Phase 1 | 禁止引入 Bevy、Tauri、WASM、Docker 相关依赖。禁止在 UI 层直接调用 LLM API。 |
-| Phase 2 | 禁止在宿主机裸跑用户代码。禁止沙箱默认联网。禁止没有超时和资源限制地运行任务。 |
-| Phase 3 | 禁止插件绕过 Core 生成最终学习进度。禁止插件直接访问用户文件、网络、密钥或数据库。 |
+| **[Phase 1]** | 禁止引入 Bevy、Tauri、WASM、Docker 相关依赖。禁止在 UI 层直接调用 LLM API。 |
+| **[Phase 2]** | 禁止在宿主机裸跑用户代码。禁止沙箱默认联网。禁止没有超时和资源限制地运行任务。 |
+| **[Phase 3]** | 禁止插件绕过 Core 生成最终学习进度。禁止插件直接访问用户文件、网络、密钥或数据库。 |
 
 ## 7. 参考资源
 
