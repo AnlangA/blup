@@ -10,11 +10,11 @@
 - `web-ui`：React/Svelte 单页应用
   - 聊天窗口（用户输入、Agent 回复）
   - 课程目录侧栏（章节列表）
-  - 章节内容区（Markdown + KaTeX + Monaco Editor）
+  - 章节内容区（Markdown + KaTeX + CodeMirror 6）
   - 简单状态路由
 
 **Phase 1 不交付：**
-- `desktop`（Tauri 桌面应用，Phase 3）
+- `desktop`（Tauri 桌面应用，Phase 2.5）
 - `bevy-viewer`（Bevy 渲染层，Phase 3）
 
 ## 2. 目标实现的路径
@@ -33,7 +33,7 @@
 - Tauri permission 和 command 文档。
 - React 或 Svelte 与 Tauri 集成资料。
 - Bevy WASM 嵌入 WebView 的实践资料。
-- Monaco Editor、KaTeX、Markdown 渲染最佳实践。
+- CodeMirror 6、KaTeX、Markdown 渲染最佳实践。
 
 核心思想：
 

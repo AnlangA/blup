@@ -16,11 +16,13 @@
 
 ## 2. 目标实现的路径
 
-- 插件优先采用 WASM Component Model。
+- 插件优先采用结构化通信协议（HTTP 微服务或 stdin/stdout 结构化协议），后续评估迁移至 WASM Component Model。
 - 每个插件声明 metadata、capabilities、permissions、input schema、output schema。
 - 插件可生成 LessonSpec、AssessmentSpec、SceneSpec 和 ToolRequest。
 - 插件不能直接访问系统资源，必须通过宿主提供的能力调用工具。
 - 插件可以请求数学计算、代码运行、场景渲染、语音练习等能力，但由 Core 和 Sandbox 决定是否执行。
+
+> **⚠️ WASM Component Model 成熟度**：截至 2025 年，WASM Component Model 和 WIT 规范仍在演进中。Phase 3 初期采用更成熟的插件通信方案，降低集成风险。`plugins/` 目录保留为 WASM 插件的最终目标形态。
 
 ### 2.1 Phase 3 插件权限模型
 

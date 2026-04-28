@@ -25,6 +25,7 @@
 | 工具名称 | 用途 | 输入 | 输出 | 使用场景 |
 |---------|------|------|------|---------|
 | **schema-validator** | 校验 JSON 数据是否符合 Schema | JSON 文件路径、Schema 文件路径 | 校验结果（通过/失败）、错误详情 | 开发时校验 LLM 输出、测试数据准备 |
+| **ci-schema-check** | CI 中校验 JSON Schema 格式 | `schemas/` 目录 | 校验结果 | pre-commit hook / GitHub Actions |
 
 **Phase 2+ 工具计划：**
 - prompt-tester：测试 prompt 模板的输出质量

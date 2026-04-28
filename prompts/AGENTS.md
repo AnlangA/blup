@@ -26,11 +26,11 @@
 
 | 模板名称 | 用途 | 输入参数 | 输出格式 | 对应 Schema |
 |---------|------|---------|---------|------------|
-| **feasibility_check.txt** | 判断学习目标是否可行 | `goal_text`（目标描述）、`domain`（领域） | JSON 结构化输出 | FeasibilityResult |
-| **profile_collection.txt** | 采集用户画像（3-5 轮对话） | `conversation_history`（对话历史）、`current_question`（当前问题） | JSON 结构化输出 | UserProfile |
-| **curriculum_planning.txt** | 生成个性化学习路径 | `learning_goal`（学习目标）、`user_profile`（用户画像） | JSON 结构化输出 | CurriculumPlan |
-| **chapter_teaching.txt** | 生成章节教学内容 | `chapter`（章节信息）、`user_profile`（用户画像）、`previous_chapters`（前置章节） | Markdown + 结构化元数据 | Chapter（content 字段） |
-| **question_answering.txt** | 回答用户在学习过程中的提问 | `question`（用户问题）、`chapter_context`（章节上下文）、`conversation_history`（对话历史） | Markdown 文本 | Message |
+| **feasibility_check.v1.prompt.md** | 判断学习目标是否可行 | `goal_text`（目标描述）、`domain`（领域） | JSON 结构化输出 | FeasibilityResult |
+| **profile_collection.v1.prompt.md** | 采集用户画像（3-5 轮对话） | `conversation_history`（对话历史）、`current_question`（当前问题） | JSON 结构化输出 | UserProfile |
+| **curriculum_planning.v1.prompt.md** | 生成个性化学习路径 | `learning_goal`（学习目标）、`user_profile`（用户画像） | JSON 结构化输出 | CurriculumPlan |
+| **chapter_teaching.v1.prompt.md** | 生成章节教学内容 | `chapter`（章节信息）、`user_profile`（用户画像）、`previous_chapters`（前置章节） | Markdown + 结构化元数据 | Chapter（content 字段） |
+| **question_answering.v1.prompt.md** | 回答用户在学习过程中的提问 | `question`（用户问题）、`chapter_context`（章节上下文）、`conversation_history`（对话历史） | Markdown 文本 | Message |
 
 **Prompt 模板结构：**
 - 系统角色定义（System Prompt）
@@ -41,7 +41,7 @@
 - 示例（Few-shot examples）
 
 **Prompt 版本管理：**
-- 文件命名格式：`{template_name}.v{version}.txt`
+- 文件命名格式：`{template_name}.v{version}.prompt.md`
 - 每个模板包含版本号和最后更新日期
 - 重大修改时递增版本号
 

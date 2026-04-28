@@ -19,7 +19,20 @@ Tauri 桌面应用
 - [Bevy](https://bevyengine.org/) — ECS 游戏引擎，用于渲染互动内容
 - [Wasmtime](https://wasmtime.dev/) — WASM Component Model 插件隔离
 - Rust (Tokio / Axum / Serde / SQLx) — 异步后端
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/) / [KaTeX](https://katex.org/) — 编辑与公式渲染
+- [CodeMirror 6](https://codemirror.net/) / [KaTeX](https://katex.org/) — 编辑与公式渲染
+
+## 当前阶段
+
+**Phase 1: MVP** —— 单用户 Web 对话学习助手。
+
+| Phase | 目标 | 状态 |
+|-------|------|------|
+| 1: MVP | Web 对话学习助手（目标判断 → 画像 → 路径 → 章节教学） | 🚧 进行中 |
+| 2: 强化 | 练习/考核引擎、代码沙箱、数据持久化 | ⏳ 计划 |
+| 2.5: 桌面化 | Tauri 包裹 Web UI，Bevy 嵌入 PoC（共享纹理） | ⏳ 计划 |
+| 3: 扩展 | WASM 插件系统、Bevy 互动场景 | ⏳ 计划 |
+
+详见 [AGENTS.md](./AGENTS.md)。
 
 ## 核心原则
 

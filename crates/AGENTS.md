@@ -30,13 +30,17 @@
 - 使用状态机表达学习流程：目标输入 → 可行性判断 → 用户画像 → 路径规划 → 章节学习
 - Core 只编排，不直接渲染，不直接执行不可信代码
 
-**Phase 2/3：Crate 拆分计划**
+**Phase 2：Crate 拆分计划**
 - `storage`：数据持久化（SQLite/PostgreSQL）
 - `assessment-engine`：练习题生成、答案评估
+- `llm-gateway`：LLM 调用封装、重试、缓存
+
+**Phase 2.5：桌面化过渡**
+- `bevy-protocol`：Bevy 场景协议实现，负责 Bevy 离屏渲染到 WGPU 纹理、通过共享内存传入 WebView 的纹理共享通道。仅依赖 `schemas/`
+
+**Phase 3：Crate 拆分计划**
 - `plugin-host`：WASM 插件加载、权限管理
 - `tool-router`：工具调度、沙箱请求路由
-- `llm-gateway`：LLM 调用封装、重试、缓存
-- `bevy-protocol`：Bevy 场景协议实现
 
 **实现原则：**
 - 使用 trait 和 schema 定义模块边界
