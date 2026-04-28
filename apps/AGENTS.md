@@ -1,58 +1,78 @@
 # AGENTS.md
 
-## 1. 目标
+## Purpose
 
-`apps` 存放面向用户的应用入口，包括 Tauri 桌面应用、Web UI、Bevy 渲染宿主或 Bevy WASM 嵌入入口。
+`apps/` contains user-facing application entry points: the Phase 1 Web UI, later the Tauri desktop shell, and later the Bevy viewer or embedded renderer.
 
-### 1.1 Phase 1 范围
+## Scope
 
-**Phase 1 交付：**
-- `web-ui`：React/Svelte 单页应用
-  - 聊天窗口（用户输入、Agent 回复）
-  - 课程目录侧栏（章节列表）
-  - 章节内容区（Markdown + KaTeX + CodeMirror 6）
-  - 简单状态路由
+### Phase 1 deliverables
 
-**Phase 1 不交付：**
-- `desktop`（Tauri 桌面应用，Phase 2.5）
-- `bevy-viewer`（Bevy 渲染层，Phase 3）
+- `apps/web-ui`: a React or Svelte single-page application.
+- Chat window for learner messages and assistant responses.
+- Curriculum sidebar with chapter navigation.
+- Chapter content area with Markdown, KaTeX, and CodeMirror 6.
+- Simple state routing that mirrors the Agent Core session state.
 
-## 2. 目标实现的路径
+### Not in Phase 1
 
-- 后续可拆分为 `apps/desktop`、`apps/web-ui`、`apps/bevy-viewer`。
-- Tauri 负责桌面窗口、系统权限、文件访问、IPC、安全配置。
-- Web UI 负责学习界面、聊天、章节、题目、Markdown、公式和代码编辑器。
-- Bevy Viewer 负责展示由 SceneSpec 描述的 2D、3D、像素风和模拟场景。
-- 应用层只能调用 Rust Core 暴露的命令或 API，不直接实现 Agent 业务逻辑。
+- `apps/desktop` Tauri application.
+- `apps/bevy-viewer` rendering host.
+- Direct code execution, direct LLM calls, or direct file-system access.
 
-## 3. 需要联网查找/参考的资料与核心思想
+## Module Responsibilities
 
-需要查找：
+- Render learning UI and user interactions.
+- Call only the Rust Agent Core API or, later, Tauri commands exposed by the trusted backend.
+- Keep long-lived learning state in Core, not scattered across UI components.
+- Display streamed SSE events, structured errors, validation failures, and retry actions clearly.
 
-- Tauri 2 frontend/backend 通信方式。
-- Tauri permission 和 command 文档。
-- React 或 Svelte 与 Tauri 集成资料。
-- Bevy WASM 嵌入 WebView 的实践资料。
-- CodeMirror 6、KaTeX、Markdown 渲染最佳实践。
+## Implementation Plan by Phase
 
-核心思想：
+- Phase 1: Web UI over REST and SSE.
+- Phase 2: Assessment UI and progress views for persisted sessions.
+- Phase 2.5: Tauri packaging and local import/export permissions.
+- Phase 3: Optional Bevy scene display embedded beside the Web UI when a validated `SceneSpec` is available.
 
-- 应用层关注用户体验，不拥有核心学习状态。
-- Web UI 和 Bevy 是两个不同渲染层：Web UI 渲染信息，Bevy 渲染互动场景。
-- 所有跨层数据交互应通过明确的结构化事件或命令完成。
+## Commands
 
-## 4. 不允许做什么事情
+Use repository-level commands when available:
 
-**全局约束请参考根文档第 6.1 节。**
+```text
+scripts/dev
+scripts/check
+```
 
-**模块特有约束：**
-- **[Module]** 不允许在 UI 层直接调用 LLM。
-- **[Module]** 不允许在 UI 层直接执行代码、编译代码或运行系统命令。
-- **[Module]** 不允许把业务状态分散存放在多个前端组件中而不经过 Core。
-- **[Module]** 不允许让 Bevy 替代传统表单、长文本、聊天和代码编辑器 UI。
+If `apps/web-ui` defines local package scripts, they must include lint and typecheck commands.
 
-## 5. 相关文档
+## Testing and Quality Gates
 
-- [根文档 AGENTS.md](../AGENTS.md) - 项目整体规划和技术栈
-- [crates/AGENTS.md](../crates/AGENTS.md) - 核心库，提供 HTTP API 供 Web UI 调用
-- [schemas/AGENTS.md](../schemas/AGENTS.md) - 协议定义，前后端通信的数据格式
+- Component tests for chat, curriculum navigation, markdown rendering, and error states.
+- SSE integration tests with mocked streams.
+- Accessibility checks for keyboard navigation and readable content.
+- Type checks must pass before merging UI changes.
+
+## Logging and Observability
+
+- UI logs must not include API keys, raw imported private content, or unredacted learner data.
+- Include `session_id` and `request_id` when reporting client errors to Core.
+- Surface backend diagnostic IDs to users instead of raw internal stack traces.
+
+## Security and Privacy Rules
+
+- The UI must never call an LLM provider directly.
+- The UI must never run user code, compile code, or execute system commands.
+- Local file import in Phase 2.5 must go through approved Tauri/backend permissions.
+- Treat imported documents as private user data by default.
+
+## Do Not
+
+- Do not implement Agent business logic in frontend components.
+- Do not let Bevy replace traditional text, form, chat, and code-display UI.
+- Do not store secrets in browser storage.
+
+## Related Files
+
+- [`../AGENTS.md`](../AGENTS.md)
+- [`../crates/AGENTS.md`](../crates/AGENTS.md)
+- [`../schemas/AGENTS.md`](../schemas/AGENTS.md)

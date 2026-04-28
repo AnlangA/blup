@@ -1,68 +1,76 @@
 # AGENTS.md
 
-## 1. 目标
+## Purpose
 
-`tools` 存放开发辅助工具、代码生成工具、schema 校验工具、插件打包工具、资产处理工具和本地运维脚本。
+`tools/` contains developer utilities, validation tools, code generators, schema checkers, prompt testers, sandbox builders, asset processors, import/export tools, and local operational scripts.
 
-### 1.1 Phase 1 范围
+## Scope
 
-**Phase 1 交付：**
-- schema-validator：JSON Schema 校验工具
+### Phase 0 and Phase 1 deliverables
 
-**Phase 1 不交付：**
-- prompt-tester（Prompt 测试工具，Phase 2）
-- plugin-builder（插件打包工具，Phase 3）
-- asset-optimizer（资产优化工具，Phase 3）
+- Schema validation tool or script.
+- Bootstrap script that checks required development tools.
+- Repository check script that runs the available validators.
 
-## 2. 目标实现的路径
+### Future deliverables
 
-- 后续可加入 schema generation、plugin build、sandbox image build、asset optimization、prompt validation 等工具。
-- 所有工具应明确输入、输出、副作用和安全限制。
-- 工具应优先服务开发流程，不承载线上业务逻辑。
+- Prompt tester.
+- Sandbox image builder.
+- Asset optimizer.
+- Plugin builder.
+- Schema generator.
+- Import pipeline tools.
+- Typst export and PDF compilation helpers.
 
-### 2.1 Phase 1 工具清单
+## Module Responsibilities
 
-| 工具名称 | 用途 | 输入 | 输出 | 使用场景 |
-|---------|------|------|------|---------|
-| **schema-validator** | 校验 JSON 数据是否符合 Schema | JSON 文件路径、Schema 文件路径 | 校验结果（通过/失败）、错误详情 | 开发时校验 LLM 输出、测试数据准备 |
-| **ci-schema-check** | CI 中校验 JSON Schema 格式 | `schemas/` 目录 | 校验结果 | pre-commit hook / GitHub Actions |
+- Make development workflows repeatable and auditable.
+- Declare inputs, outputs, side effects, and security limits for every tool.
+- Support CI without requiring private credentials.
+- Keep source files and generated artifacts clearly separated.
 
-**Phase 2+ 工具计划：**
-- prompt-tester：测试 prompt 模板的输出质量
-- sandbox-builder：构建沙箱 Docker 镜像
-- asset-optimizer：压缩和优化图片、字体等资产
+## Planned Tooling
 
-**Phase 3+ 工具计划：**
-- plugin-builder：打包 WASM 插件
-- schema-generator：从 Rust 结构体生成 JSON Schema
+| Tool | Phase | Purpose |
+| --- | --- | --- |
+| `schema-validator` | Phase 1 | Validate JSON payloads against schemas |
+| `schema-check` | Phase 1 | Validate all schema files and fixtures in CI |
+| `bootstrap` | Phase 0 | Check Rust, Node, package manager, and phase-specific tools |
+| `check` | Phase 0 | Run formatters, linters, tests, and schema checks |
+| `prompt-tester` | Phase 2 | Test prompt templates against fixtures and schema contracts |
+| `sandbox-builder` | Phase 2 | Build sandbox images reproducibly |
+| `typst-export` | Phase 2.5 | Generate Typst documents and compile PDFs through controlled commands |
+| `content-importer` | Phase 2.5 | Extract source documents from PDF, text, Markdown, and websites |
+| `plugin-builder` | Phase 3 | Package and validate plugins |
+| `asset-optimizer` | Phase 3 | Optimize assets with recorded provenance |
 
-## 3. 需要联网查找/参考的资料与核心思想
+## Testing and Quality Gates
 
-需要查找：
+- Tools must return non-zero exit codes on failure.
+- Tools must have deterministic fixtures where practical.
+- Tools that execute external commands must show the command category and capture structured diagnostics.
+- Import/export tools must test success and failure cases.
 
-- Rust CLI 工具开发资料，如 clap、xshell、duct。
-- JSON Schema validation 工具。
-- WASM plugin build pipeline。
-- Docker image build 最佳实践。
-- Asset optimization 工具资料。
+## Logging and Observability
 
-核心思想：
+Tool logs should include tool name, version, input summary, output path or artifact ID, duration, and structured errors. Do not log secrets or full private documents.
 
-- 工具链应可重复、可审计、可在 CI 中运行。
-- 生成物和源文件边界必须清晰。
-- 工具不能绕过 Core 的安全模型。
+## Security and Privacy Rules
 
-## 4. 不允许做什么事情
+- Do not delete user files by default.
+- Do not upload local data by default.
+- Do not hide external command execution.
+- Do not hard-code local absolute paths, credentials, or personal configuration.
+- Treat imported documents as private unless explicitly marked as public fixtures.
 
-**全局约束请参考根文档第 6.1 节。**
+## Do Not
 
-**模块特有约束：**
-- **[Module]** 不允许工具默认删除用户文件。
-- **[Module]** 不允许工具默认上传本地数据。
-- **[Module]** 不允许工具隐藏执行外部命令。
-- **[Module]** 不允许在工具中硬编码本地绝对路径、密钥或个人配置。
+- Do not make tooling carry production business logic.
+- Do not generate files into source directories without clear naming and review.
+- Do not require paid external services for default checks.
 
-## 5. 相关文档
+## Related Files
 
-- [根文档 AGENTS.md](../AGENTS.md) - 项目整体规划
-- [schemas/AGENTS.md](../schemas/AGENTS.md) - 协议定义，schema-validator 的校验对象
+- [`../AGENTS.md`](../AGENTS.md)
+- [`../schemas/AGENTS.md`](../schemas/AGENTS.md)
+- [`../tests/AGENTS.md`](../tests/AGENTS.md)

@@ -1,81 +1,93 @@
 # AGENTS.md
 
-## 1. 目标
+## Purpose
 
-`crates` 存放 Rust 核心库，是项目的 Agent Runtime、业务状态机、插件宿主、数据模型、工具调度和协议实现所在地。
+`crates/` contains Rust services and libraries. It is the trusted core for Agent orchestration, state transitions, LLM calls, validation, storage, tool routing, plugin hosting, and protocol implementation.
 
-### 1.1 Phase 1 范围
+## Scope
 
-**Phase 1 交付：**
-- `agent-core`：单一 crate，包含所有核心逻辑
-  - HTTP 服务（Axum）
-  - 学习流程状态机（目标判断 → 画像采集 → 路径规划 → 章节教学）
-  - LLM 调用封装（OpenAI-compatible API）
-  - Prompt 模板加载
-  - Schema 验证
+### Phase 1 deliverables
 
-**Phase 1 不交付：**
-- `storage`（数据持久化）
-- `plugin-host`（插件系统）
-- `assessment-engine`（评估引擎）
-- `tool-router`（工具路由）
-- `llm-gateway`（LLM 网关）
-- `bevy-protocol`（Bevy 协议）
+- `crates/agent-core`: a single Rust crate containing:
+  - Axum HTTP service.
+  - Learning-flow state machine.
+  - OpenAI-compatible LLM client boundary.
+  - Prompt template loading.
+  - Schema validation for structured LLM output and API payloads.
+  - Structured logging with `tracing`.
 
-## 2. 目标实现的路径
+### Not in Phase 1
 
-**Phase 1：单一 Crate**
-- `agent-core`：包含所有核心逻辑（HTTP 服务、状态机、LLM 调用、prompt 加载）
-- 使用 Rust 类型系统表达核心领域模型
-- 使用状态机表达学习流程：目标输入 → 可行性判断 → 用户画像 → 路径规划 → 章节学习
-- Core 只编排，不直接渲染，不直接执行不可信代码
+- `storage` persistent database crate.
+- `assessment-engine` crate.
+- `llm-gateway` split-out crate.
+- `tool-router`, `plugin-host`, or `bevy-protocol` crates.
+- Host execution of user-submitted code.
 
-**Phase 2：Crate 拆分计划**
-- `storage`：数据持久化（SQLite/PostgreSQL）
-- `assessment-engine`：练习题生成、答案评估
-- `llm-gateway`：LLM 调用封装、重试、缓存
+## Module Responsibilities
 
-**Phase 2.5：桌面化过渡**
-- `bevy-protocol`：Bevy 场景协议实现，负责 Bevy 离屏渲染到 WGPU 纹理、通过共享内存传入 WebView 的纹理共享通道。仅依赖 `schemas/`
+- Own the learning state machine and enforce valid transitions.
+- Treat LLMs, plugins, sandboxes, importers, compilers, and renderers as external capabilities.
+- Validate all structured inputs and outputs before changing state.
+- Centralize error handling, authorization checks, redaction, and observability.
 
-**Phase 3：Crate 拆分计划**
-- `plugin-host`：WASM 插件加载、权限管理
-- `tool-router`：工具调度、沙箱请求路由
+## Implementation Plan by Phase
 
-**实现原则：**
-- 使用 trait 和 schema 定义模块边界
-- 状态机驱动流程，确保可追踪和可回放
-- 错误处理、权限检查、日志在 Core 层统一处理
+- Phase 1: single `agent-core` crate for fast iteration.
+- Phase 2: split `storage`, `assessment-engine`, and `llm-gateway` when persistence and assessments become real.
+- Phase 2.5: add content/import/export pipeline crates only after file permissions and artifact rules are defined.
+- Phase 3: add `plugin-host`, `tool-router`, and `bevy-protocol` behind explicit schemas and permission checks.
 
-## 3. 需要联网查找/参考的资料与核心思想
+## Commands
 
-需要查找：
+Expected repository-level Rust checks:
 
-- Tokio、Serde、SQLx、thiserror、tracing 等 Rust 生态资料。
-- async-openai 或 OpenAI-compatible client 文档。
-- Rust 状态机建模实践。
-- Rust trait object、dynamic dispatch、workspace crate 划分实践。
-- Wasmtime host integration 文档。
+```text
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+```
 
-核心思想：
+If a crate adds feature flags, CI must test the feature combinations that affect public behavior.
 
-- Rust Core 是系统的可信主控层。
-- LLM、插件、沙箱、渲染器都应被视为外部能力，通过明确接口调用。
-- 错误处理、权限检查、日志、安全边界必须在 Core 层统一处理。
+## Testing and Quality Gates
 
-## 4. 不允许做什么事情
+- Unit tests for state transitions and error handling.
+- Integration tests for REST and SSE endpoints.
+- Mock LLM tests with deterministic responses.
+- Schema validation tests for all API and LLM output boundaries.
+- Retry tests for schema-validation failures and LLM transport failures.
+- No default test may call a paid LLM API.
 
-**全局约束请参考根文档第 6.1 节。**
+## Logging and Observability
 
-**模块特有约束：**
-- **[Module]** 不允许 Core 直接包含 UI 组件代码。
-- **[Module]** 不允许 Core 直接运行用户代码。
-- **[Module]** 不允许绕过权限系统调用插件或沙箱。
-- **[Module]** 不允许把 LLM 返回内容当作可信事实直接写入最终结果。
-- **[Module]** 不允许使用未验证的字符串协议替代结构化类型。
+Use `tracing` spans for requests, sessions, state transitions, LLM calls, validation, imports, exports, and tool execution.
 
-## 5. 相关文档
+Required fields where applicable:
 
-- [根文档 AGENTS.md](../AGENTS.md) - 项目整体规划和 crate 划分方案
-- [schemas/AGENTS.md](../schemas/AGENTS.md) - 协议定义，本模块依赖的数据结构
-- [prompts/AGENTS.md](../prompts/AGENTS.md) - Prompt 模板，由本模块加载和使用
+```text
+request_id, session_id, state, event, duration_ms, model, retry_count, validation_status, error_code
+```
+
+Redact prompts, imported private content, API keys, and user secrets. Log token counts and checksums instead of raw sensitive content.
+
+## Security and Privacy Rules
+
+- Core must not contain UI component code.
+- Core must not execute user code on the host.
+- LLM output is untrusted until validated.
+- Tool, sandbox, plugin, and document compiler calls must go through explicit request types and permission checks.
+- Errors returned to clients should be useful but must not expose secrets or internal stack traces.
+
+## Do Not
+
+- Do not use untyped string protocols where schemas or Rust types are required.
+- Do not bypass validation to speed up a demo.
+- Do not write API keys, local paths, or private learner records to logs.
+
+## Related Files
+
+- [`../AGENTS.md`](../AGENTS.md)
+- [`../schemas/AGENTS.md`](../schemas/AGENTS.md)
+- [`../prompts/AGENTS.md`](../prompts/AGENTS.md)
+- [`../tests/AGENTS.md`](../tests/AGENTS.md)

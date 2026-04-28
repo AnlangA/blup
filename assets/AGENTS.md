@@ -1,78 +1,75 @@
 # AGENTS.md
 
-## 1. 目标
+## Purpose
 
-`assets` 存放非代码资产，例如 Bevy 场景资源、图片、字体、音频、模型、像素风素材、示例教学素材等。
+`assets/` stores non-code assets such as fonts, icons, images, audio, 3D models, scene resources, and licensed sample learning materials.
 
-### 1.1 Phase 1 范围
+## Scope
 
-**Phase 1 交付：**
-- 基础 UI 图标（如需要）
-- 字体文件（如需要）
+### Phase 1 deliverables
 
-**Phase 1 不交付：**
-- 场景背景图片（Phase 3）
-- 3D 模型（Phase 3）
-- 音频文件（Phase 3）
+- Basic UI icons if required.
+- Fonts if required for readable learning content.
 
-## 2. 目标实现的路径
+### Future deliverables
 
-- 按资源类型和使用场景组织资产。
-- 所有资产应记录来源、授权和用途。
-- Bevy 使用的模型、贴图、字体和音频应保持可加载、可压缩、可替换。
-- 教学素材应尽量与具体课程插件解耦。
+- Scene images and sprites for Bevy scenes.
+- Audio, sound effects, 3D models, and richer interactive-learning assets.
+- Sample learning material fixtures with explicit licensing.
 
-### 2.1 资产分类结构
+## Module Responsibilities
 
-```
+- Keep assets organized by type and usage.
+- Record asset source, license, and intended use.
+- Keep render assets replaceable and independent from business logic.
+- Separate source assets from generated or optimized artifacts.
+
+## Recommended Structure
+
+```text
 assets/
-├── fonts/          # 字体文件（.ttf, .woff2）
-├── icons/          # UI 图标（.svg, .png）
-├── images/         # 图片资源
-│   ├── ui/         # UI 相关图片（按钮、背景等）
-│   └── scenes/     # 场景背景（Phase 3）
-├── audio/          # 音频文件（Phase 3）
-│   ├── music/      # 背景音乐
-│   └── sfx/        # 音效
-└── models/         # 3D 模型（Phase 3）
-    ├── characters/ # 角色模型
-    └── objects/    # 物体模型
+├── fonts/
+├── icons/
+├── images/
+│   ├── ui/
+│   └── scenes/
+├── audio/
+│   ├── music/
+│   └── sfx/
+└── models/
+    ├── characters/
+    └── objects/
 ```
 
-**资产命名规范：**
-- 使用小写字母和连字符：`button-primary.svg`
-- 包含尺寸信息（如需要）：`icon-home-24x24.png`
-- 包含状态信息（如需要）：`button-hover.png`
+## Naming Rules
 
-**资产元数据：**
-- 每个资产目录包含 `README.md`，记录来源、授权、用途
+- Use lowercase names with hyphens, for example `button-primary.svg`.
+- Include dimensions when useful, for example `icon-home-24x24.png`.
+- Include state names when useful, for example `button-hover.png`.
 
-## 3. 需要联网查找/参考的资料与核心思想
+## Testing and Quality Gates
 
-需要查找：
+- New assets must have a known source and license.
+- Large binary assets must have a documented purpose.
+- Generated assets should be reproducible or excluded from source control.
 
-- Bevy asset pipeline 文档。
-- glTF、PNG、WebP、OGG、字体格式资料。
-- 开源素材授权协议，如 CC0、CC-BY、MIT、Apache-2.0。
-- 像素风素材制作和压缩资料。
+## Logging and Observability
 
-核心思想：
+Asset processing tools should log source path, output path, optimizer version, size changes, and errors without exposing private user files.
 
-- 资产必须有明确来源和授权。
-- 渲染资产服务于教学场景，不应绑定具体业务逻辑。
-- 优先使用轻量、跨平台、可缓存的格式。
+## Security and Privacy Rules
 
-## 4. 不允许做什么事情
+- Do not commit assets with unclear licensing.
+- Do not commit user-private imported documents into `assets/`.
+- Do not store secrets, generated caches, or private paths in asset metadata.
 
-**全局约束请参考根文档第 6.1 节。**
+## Do Not
 
-**模块特有约束：**
-- **[Module]** 不允许提交来源不明或授权不清的素材。
-- **[Module]** 不允许提交过大的二进制资产而不说明用途。
-- **[Module]** 不允许在资产目录中存放密钥、用户数据或生成缓存。
-- **[Module]** 不允许让资产文件名包含敏感信息。
+- Do not bind assets directly to Agent business logic.
+- Do not add large binaries without justification.
+- Do not use filenames that contain sensitive information.
 
-## 5. 相关文档
+## Related Files
 
-- [根文档 AGENTS.md](../AGENTS.md) - 项目整体规划
-- [apps/AGENTS.md](../apps/AGENTS.md) - 应用入口，使用本模块的资产
+- [`../AGENTS.md`](../AGENTS.md)
+- [`../apps/AGENTS.md`](../apps/AGENTS.md)

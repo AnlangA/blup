@@ -1,71 +1,74 @@
 # AGENTS.md
 
-## 1. 目标
+## Purpose
 
-`tests` 存放跨模块测试、集成测试、端到端测试、插件契约测试、沙箱安全测试和学习流程回归测试。
+`tests/` contains integration tests, contract tests, end-to-end tests, sandbox security tests, plugin tests, import/export tests, and learning-flow regression tests.
 
-### 1.1 Phase 1 范围
+## Scope
 
-**Phase 1 交付：**
-- 核心流程集成测试（目标判断、画像采集、路径规划、章节教学）
-- Schema 校验测试
-- HTTP API 测试
+### Phase 1 deliverables
 
-**Phase 1 不交付：**
-- 沙箱安全测试（Phase 2）
-- 插件契约测试（Phase 3）
-- E2E 自动化测试（Phase 2+）
+- Core learning-flow integration tests.
+- State-machine transition tests.
+- Schema validation tests.
+- HTTP API tests.
+- SSE stream tests.
+- Prompt contract tests with mock LLM outputs.
 
-## 2. 目标实现的路径
+### Future deliverables
 
-- 为 Agent 状态机设计流程测试。
-- 为 schema 设计兼容性和校验测试。
-- 为插件接口设计 contract test。
-- 为沙箱设计超时、资源限制、恶意输入测试。
-- 为 UI 和 Bevy 交互设计端到端测试。
+- Sandbox security and resource-limit tests in Phase 2.
+- Assessment engine tests in Phase 2.
+- Import/export and Typst compilation tests in Phase 2.5.
+- Plugin contract tests in Phase 3.
+- Full E2E tests once the UI and backend are stable.
 
-### 2.1 测试覆盖率目标
+## Module Responsibilities
 
-| 阶段 | 覆盖率目标 | 重点测试内容 |
-|------|-----------|-------------|
-| **Phase 1** | 核心流程覆盖率 80%+ | 目标判断、画像采集、路径规划、章节教学的完整流程 |
-| **Phase 2** | 沙箱执行 90%+、评估引擎 85%+ | 超时、资源限制、恶意输入、评分逻辑 |
-| **Phase 3** | 插件系统 80%+ | 插件加载、权限检查、生命周期管理 |
+- Make the learning flow regression-testable.
+- Verify schemas, prompts, APIs, state transitions, and tool boundaries.
+- Prefer deterministic fixtures and mocks over live external services.
+- Test failures, timeouts, invalid inputs, and malicious inputs as first-class cases.
 
-**测试策略：**
-- 使用 mock LLM 响应，避免测试不稳定
-- 使用 snapshot testing（insta）验证结构化输出
-- 使用 property-based testing（proptest）测试边界情况
+## Coverage Targets
 
-## 3. 需要联网查找/参考的资料与核心思想
+| Phase | Target | Focus |
+| --- | --- | --- |
+| Phase 1 | 80%+ core-flow coverage | goal feasibility, profile collection, curriculum planning, chapter teaching |
+| Phase 2 | 90%+ sandbox path coverage and 85%+ assessment-engine coverage | timeouts, limits, malicious input, scoring |
+| Phase 2.5 | import/export fixture coverage | PDF/text/web extraction, Typst compile diagnostics |
+| Phase 3 | 80%+ plugin-system coverage | manifests, permissions, lifecycle, contract tests |
 
-需要查找：
+Coverage targets guide quality; critical security and state-machine paths must be tested even if line coverage is high.
 
-- Rust cargo test、insta snapshot、proptest 文档。
-- Playwright 或 WebDriver 测试资料。
-- Tauri 测试资料。
-- Bevy headless 或场景测试资料。
-- 沙箱安全测试案例。
+## Testing and Quality Gates
 
-核心思想：
+- No default test may call a paid LLM API.
+- No test may use real private learner data.
+- No test may run untrusted code on the host.
+- Snapshot tests may be used for structured output when snapshots are reviewed.
+- Property-based tests should cover boundary values for schemas and state transitions where useful.
+- Failing sandbox exits, timeouts, and validation errors must be asserted, not ignored.
 
-- 学习流程必须可回归验证。
-- 插件必须通过契约测试才能接入。
-- 沙箱必须优先测试失败、超时和恶意输入。
-- LLM 相关测试应使用固定响应或 mock，避免不稳定。
+## Logging and Observability
 
-## 4. 不允许做什么事情
+Tests should assert structured error codes and diagnostic IDs where relevant. Test logs must remain redacted and should not include secrets or full private fixture content.
 
-**全局约束请参考根文档第 6.1 节。**
+## Security and Privacy Rules
 
-**模块特有约束：**
-- **[Module]** 不允许测试依赖真实用户隐私数据。
-- **[Module]** 不允许在默认测试中调用付费 LLM API。
-- **[Module]** 不允许测试裸跑不可信代码。
-- **[Module]** 不允许忽略沙箱失败、超时或非零退出码。
+- Use synthetic fixtures only.
+- Keep malicious input fixtures isolated and clearly labeled.
+- Do not require developer machines to have private credentials to run the default test suite.
 
-## 5. 相关文档
+## Do Not
 
-- [根文档 AGENTS.md](../AGENTS.md) - 项目整体规划
-- [crates/AGENTS.md](../crates/AGENTS.md) - 核心库，测试的主要对象
-- [schemas/AGENTS.md](../schemas/AGENTS.md) - 协议定义，用于测试数据校验
+- Do not make tests depend on live LLM output.
+- Do not skip invalid-transition tests.
+- Do not treat import/export or sandbox failures as non-critical once those features exist.
+
+## Related Files
+
+- [`../AGENTS.md`](../AGENTS.md)
+- [`../crates/AGENTS.md`](../crates/AGENTS.md)
+- [`../schemas/AGENTS.md`](../schemas/AGENTS.md)
+- [`../sandboxes/AGENTS.md`](../sandboxes/AGENTS.md)

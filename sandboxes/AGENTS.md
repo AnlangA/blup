@@ -1,73 +1,88 @@
 # AGENTS.md
 
-## 1. 目标
+## Purpose
 
-`sandboxes` 存放真实计算、代码编译、代码运行、题目评测和外部工具执行环境相关内容。
+`sandboxes/` contains isolated execution environments for deterministic tools: code compilation, code execution, math engines, grading, and document compilation.
 
-### 1.1 Phase 1 范围
+## Scope
 
-**Phase 1 交付：**
-- 无（Phase 1 不运行用户代码）
+### Phase 1 deliverables
 
-**Phase 1 不交付：**
-- Docker 沙箱环境
-- 代码编译执行功能
-- 数学计算引擎
+None. Phase 1 does not run user code and does not require a sandbox.
 
-## 2. 目标实现的路径
+### Phase 2 deliverables
 
-- MVP 阶段使用 Docker 沙箱执行代码和测试。
-- 数学计算可通过 Rust 数值库和 Python SymPy/NumPy/SciPy 沙箱实现。
-- 成熟阶段评估 WASI 和 Firecracker microVM。
-- 所有执行请求必须来自 Core 的 ToolRequest。
-- 每次执行必须有超时、资源限制、输入输出限制和审计日志。
+- Docker-based sandbox for code execution and assessment.
+- Resource limits, disabled network by default, and structured audit logs.
+- Tool request and response schemas coordinated with `schemas/` and `crates/`.
 
-### 2.1 Phase 2 资源限制标准
+### Phase 2.5 deliverables
 
-| 资源类型 | 限制值 | 说明 |
-|---------|-------|------|
-| **超时时间** | 编译：30 秒<br>运行：10 秒 | 超时后强制终止进程 |
-| **内存限制** | 512MB | 防止内存耗尽攻击 |
-| **CPU 限制** | 1 核 | 限制 CPU 使用率 |
-| **磁盘限制** | 100MB | 限制临时文件大小 |
-| **网络访问** | 默认禁用 | 特定场景可启用（需审计） |
-| **进程数** | 最多 10 个 | 防止 fork 炸弹 |
+- Controlled Typst compilation environment for learning-document exports.
+- Import helper tools only if they are isolated from private user data leaks.
 
-**审计日志要求：**
-- 记录每次执行的输入、输出、退出码、资源使用情况
-- 记录超时和异常终止事件
-- 日志格式：JSON，包含时间戳、请求 ID、用户 ID（如有）
+### Future evaluation
 
-## 3. 需要联网查找/参考的资料与核心思想
+WASI and Firecracker microVMs may be evaluated after Docker-based isolation is well specified and tested.
 
-需要查找：
+## Module Responsibilities
 
-- Docker sandbox 安全实践。
-- WASI 权限模型。
-- Firecracker microVM 文档。
-- Judge0 或在线评测系统架构资料。
-- Python SymPy、NumPy、SciPy 官方资料。
-- 代码执行沙箱逃逸风险资料。
+- Execute deterministic tasks for Core through structured requests.
+- Enforce timeout, CPU, memory, disk, process, network, input, and output limits.
+- Return real execution results, never fabricated success.
+- Emit structured logs for audit and debugging.
 
-核心思想：
+## Resource Limits
 
-- 确定性任务必须真实执行。
-- 所有不可信输入都必须隔离运行。
-- 结果必须可复现、可审计、可超时终止。
+Initial Phase 2 defaults:
 
-## 4. 不允许做什么事情
+| Resource | Limit | Notes |
+| --- | --- | --- |
+| Compile timeout | 30 seconds | terminate after timeout |
+| Run timeout | 10 seconds | terminate after timeout |
+| Memory | 512 MB | prevent exhaustion attacks |
+| CPU | 1 core | limit abuse |
+| Disk | 100 MB temporary space | prevent unbounded output |
+| Network | disabled by default | enable only with explicit approval and audit |
+| Processes | maximum 10 | reduce fork-bomb risk |
 
-**全局约束请参考根文档第 6.1 节。**
+## Testing and Quality Gates
 
-**模块特有约束：**
-- **[Module]** 不允许在宿主机裸跑用户提交的代码。
-- **[Module]** 不允许没有超时和资源限制地运行任务。
-- **[Module]** 不允许将宿主敏感目录挂载进沙箱。
-- **[Module]** 不允许沙箱默认联网。
-- **[Module]** 不允许把沙箱错误静默吞掉或伪造成功结果。
+- Timeout tests.
+- Memory and CPU limit tests.
+- Disk limit and output truncation tests.
+- Disabled-network tests.
+- Malicious input tests.
+- Non-zero exit and compiler-error tests.
+- Typst compile success and failure tests in Phase 2.5.
 
-## 5. 相关文档
+## Logging and Observability
 
-- [根文档 AGENTS.md](../AGENTS.md) - 项目整体规划和阶段划分
-- [schemas/AGENTS.md](../schemas/AGENTS.md) - 沙箱请求和响应的协议定义（Phase 2）
-- [crates/AGENTS.md](../crates/AGENTS.md) - 核心库，负责调度沙箱请求
+Sandbox audit logs should include:
+
+```text
+request_id, session_id, tool_kind, image_id, limits, exit_code, timed_out, duration_ms, stdout_truncated, stderr_truncated, resource_usage
+```
+
+Do not log full private source documents, API keys, or unbounded stdout/stderr.
+
+## Security and Privacy Rules
+
+- Never run user-submitted code on the host.
+- Never mount sensitive host directories.
+- Disable network by default.
+- Treat all inputs as untrusted.
+- Fail closed when limits cannot be enforced.
+
+## Do Not
+
+- Do not silently swallow sandbox errors.
+- Do not fake successful execution.
+- Do not add sandbox functionality to Phase 1.
+
+## Related Files
+
+- [`../AGENTS.md`](../AGENTS.md)
+- [`../schemas/AGENTS.md`](../schemas/AGENTS.md)
+- [`../crates/AGENTS.md`](../crates/AGENTS.md)
+- [`../tests/AGENTS.md`](../tests/AGENTS.md)
