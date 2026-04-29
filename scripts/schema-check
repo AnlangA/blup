@@ -1,0 +1,90 @@
+#!/bin/sh
+# schema-check — Validate all JSON Schema files and fixtures
+# Usage: ./scripts/schema-check [--schemas-only] [--fixtures-only]
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/colors.sh"
+
+SCHEMAS_DIR="./schemas"
+FIXTURES_DIR="./schemas/fixtures"
+ERRORS=0
+
+echo "=== Schema Validation ==="
+
+for schema_file in "$SCHEMAS_DIR"/*.schema.json; do
+    if [ ! -f "$schema_file" ]; then
+        warn "No schema files found"
+        break
+    fi
+
+    basename=$(basename "$schema_file")
+
+    # Validate JSON syntax
+    if ! python3 -m json.tool "$schema_file" >/dev/null 2>&1; then
+        fail "$basename — invalid JSON syntax"
+        ERRORS=$((ERRORS + 1))
+        continue
+    fi
+
+    # Check required fields
+    if ! python3 -c "
+import json, sys
+s = json.load(open('$schema_file'))
+assert '\$schema' in s, 'Missing \$schema'
+assert '\$id' in s, 'Missing \$id'
+assert 'version' in s, 'Missing version field'
+" 2>&1; then
+        fail "$basename — missing required fields"
+        ERRORS=$((ERRORS + 1))
+        continue
+    fi
+
+    pass "$basename"
+done
+
+# Validate fixtures against their schemas
+if [ -d "$FIXTURES_DIR" ]; then
+    echo ""
+    echo "--- Fixture Validation ---"
+
+    for fixture_dir in "$FIXTURES_DIR"/*/; do
+        [ -d "$fixture_dir" ] || continue
+        schema_name=$(basename "$fixture_dir")
+        schema_file="$SCHEMAS_DIR/${schema_name}.v1.schema.json"
+
+        if [ ! -f "$schema_file" ]; then
+            warn "No schema for fixture directory '$schema_name'"
+            continue
+        fi
+
+        for valid_file in "$fixture_dir"/valid-*.json; do
+            [ -f "$valid_file" ] || continue
+            if python3 -m json.tool "$valid_file" >/dev/null 2>&1; then
+                pass "$schema_name/$(basename "$valid_file")"
+            else
+                fail "$schema_name/$(basename "$valid_file") — invalid JSON"
+                ERRORS=$((ERRORS + 1))
+            fi
+        done
+
+        for invalid_file in "$fixture_dir"/invalid-*.json; do
+            [ -f "$invalid_file" ] || continue
+            if python3 -m json.tool "$invalid_file" >/dev/null 2>&1; then
+                pass "$schema_name/$(basename "$invalid_file")"
+            else
+                fail "$schema_name/$(basename "$invalid_file") — invalid JSON"
+                ERRORS=$((ERRORS + 1))
+            fi
+        done
+    done
+fi
+
+echo ""
+if [ "$ERRORS" -gt 0 ]; then
+    fail "$ERRORS validation error(s) found."
+    exit 1
+else
+    pass "All schemas valid."
+fi

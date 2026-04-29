@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blup.dev/schemas/learning_goal.v1.schema.json",
+  "title": "LearningGoal",
+  "type": "object",
+  "version": "1.0.0",
+  "required": ["description", "domain"],
+  "properties": {
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 2000,
+      "description": "What the learner wants to learn"
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 200,
+      "description": "Subject domain (e.g. programming, mathematics, physics)"
+    },
+    "context": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Optional background about why they want to learn this"
+    },
+    "current_level": {
+      "type": "string",
+      "enum": ["beginner", "intermediate", "advanced", "unknown"],
+      "description": "Self-assessed current level"
+    }
+  }
+}

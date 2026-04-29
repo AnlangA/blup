@@ -1,0 +1,10 @@
+{
+  "question_id": "q1",
+  "question": "How would you describe your experience with programming?",
+  "options": [
+    {"id": "none", "label": "No programming experience"},
+    {"id": "basic", "label": "Some basic experience"},
+    {"id": "intermediate", "label": "Comfortable with programming"}
+  ],
+  "is_complete": false
+}

@@ -1,0 +1,45 @@
+#!/bin/sh
+# bootstrap — Verify development tooling for Blup
+# Usage: ./scripts/bootstrap [--phase phase1|phase2|phase2.5|phase3]
+# Default phase: phase1
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/colors.sh"
+. "$SCRIPT_DIR/lib/checks.sh"
+
+PHASE="${1:-phase1}"
+ERRORS=0
+
+echo "=== Blup Bootstrap ==="
+echo "Checking tools for: $PHASE"
+echo ""
+
+# Always required
+check_cmd "cargo"     "Rust/Cargo"    "cargo --version"    || ERRORS=$((ERRORS + 1))
+check_cmd "rustc"     "Rust Compiler"  "rustc --version"   || ERRORS=$((ERRORS + 1))
+check_cmd "python3"   "Python"         "python3 --version" || ERRORS=$((ERRORS + 1))
+check_cmd "node"      "Node.js"        "node --version"    || ERRORS=$((ERRORS + 1))
+check_cmd "npm"       "npm"            "npm --version"     || ERRORS=$((ERRORS + 1))
+
+# Phase-specific checks
+case "$PHASE" in
+    phase2|phase2.5|phase3)
+        check_cmd "docker" "Docker" "docker --version" || ERRORS=$((ERRORS + 1))
+        ;;
+esac
+
+case "$PHASE" in
+    phase2.5)
+        check_cmd "typst" "Typst" "typst --version" || ERRORS=$((ERRORS + 1))
+        ;;
+esac
+
+echo ""
+if [ "$ERRORS" -gt 0 ]; then
+    fail "$ERRORS tool(s) missing or outdated. Please install them and retry."
+    exit 1
+else
+    pass "All required tools are available."
+fi

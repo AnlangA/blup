@@ -1,0 +1,12 @@
+{
+  "experience_level": {
+    "domain_knowledge": "beginner"
+  },
+  "learning_style": {
+    "preferred_format": ["exercise-based"]
+  },
+  "available_time": {
+    "hours_per_week": 5
+  },
+  "is_complete": true
+}

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blup.dev/schemas/user_profile.v1.schema.json",
+  "title": "UserProfile",
+  "type": "object",
+  "version": "1.0.0",
+  "required": ["experience_level", "learning_style", "available_time"],
+  "properties": {
+    "experience_level": {
+      "type": "object",
+      "required": ["domain_knowledge"],
+      "properties": {
+        "domain_knowledge": {
+          "type": "string",
+          "enum": ["none", "beginner", "intermediate", "advanced"],
+          "description": "Knowledge level in the target domain"
+        },
+        "related_domains": {
+          "type": "array",
+          "items": { "type": "string" },
+          "maxItems": 10
+        },
+        "years_of_experience": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 50
+        }
+      }
+    },
+    "learning_style": {
+      "type": "object",
+      "required": ["preferred_format"],
+      "properties": {
+        "preferred_format": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["text", "visual", "interactive", "audio", "exercise-based", "project-based"]
+          },
+          "minItems": 1
+        },
+        "pace_preference": {
+          "type": "string",
+          "enum": ["slow_thorough", "moderate", "fast_paced", "self_directed"]
+        },
+        "notes": { "type": "string", "maxLength": 1000 }
+      }
+    },
+    "available_time": {
+      "type": "object",
+      "required": ["hours_per_week"],
+      "properties": {
+        "hours_per_week": { "type": "number", "minimum": 0.5, "maximum": 80 },
+        "preferred_session_length_minutes": { "type": "number", "minimum": 5, "maximum": 240 },
+        "timezone": { "type": "string" }
+      }
+    },
+    "goals": {
+      "type": "object",
+      "properties": {
+        "primary_goal": { "type": "string", "maxLength": 500 },
+        "secondary_goals": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 300 },
+          "maxItems": 5
+        },
+        "success_criteria": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "preferences": {
+      "type": "object",
+      "properties": {
+        "language": { "type": "string", "maxLength": 50 },
+        "difficulty_bias": {
+          "type": "string",
+          "enum": ["easier", "standard", "challenging"]
+        },
+        "feedback_frequency": {
+          "type": "string",
+          "enum": ["immediate", "end_of_section", "end_of_chapter"]
+        }
+      }
+    }
+  }
+}

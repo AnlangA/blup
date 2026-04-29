@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blup.dev/schemas/message.v1.schema.json",
+  "title": "Message",
+  "type": "object",
+  "version": "1.0.0",
+  "required": ["id", "role", "content", "timestamp"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "role": {
+      "type": "string",
+      "enum": ["user", "assistant", "system"]
+    },
+    "content": {
+      "type": "string",
+      "maxLength": 20000,
+      "description": "Message content in Markdown"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "content_type": {
+      "type": "string",
+      "enum": ["text", "question", "exercise", "feedback", "explanation", "example", "summary"],
+      "description": "Semantic type of the message for UI rendering decisions"
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "chapter_id": { "type": "string" },
+          "concept": { "type": "string" },
+          "source_chunk_id": { "type": "string" }
+        }
+      },
+      "maxItems": 10
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "tokens_used": { "type": "integer", "minimum": 0 },
+        "model": { "type": "string" },
+        "generation_duration_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "feasible": false,
+  "reason": "\"Learn programming\" is too broad. There are dozens of programming languages and paradigms.",
+  "suggestions": [
+    "Choose a specific language (Python is recommended for beginners)",
+    "Pick a project type (web development, data analysis, automation)",
+    "Example: \"Learn Python to build simple web applications\""
+  ],
+  "estimated_duration": "N/A — refine goal first"
+}

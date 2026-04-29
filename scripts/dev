@@ -1,0 +1,171 @@
+#!/bin/sh
+# dev — Start Blup development environment
+# Usage: ./scripts/dev [--with-gateway] [--gateway-only]
+#
+# Starts:
+#   1. llm-gateway on localhost:9000 (Python, if --with-gateway)
+#   2. agent-core on localhost:3000   (Rust)
+#   3. web-ui on localhost:5173       (Vite)
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+. "$SCRIPT_DIR/lib/colors.sh"
+
+WITH_GATEWAY=false
+GATEWAY_ONLY=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --with-gateway) WITH_GATEWAY=true ;;
+        --gateway-only) GATEWAY_ONLY=true ;;
+    esac
+done
+
+echo "=== Blup Dev Server ==="
+
+# ---- 0. Environment setup ----
+if [ ! -f "$PROJECT_DIR/.env" ]; then
+    if [ -f "$PROJECT_DIR/.env.example" ]; then
+        info "Creating .env from .env.example..."
+        cp "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
+        warn "Please edit .env and set your API keys before starting services."
+        warn "  vim .env"
+        exit 1
+    fi
+fi
+
+# Load .env into environment
+info "Loading .env..."
+set -a
+. "$PROJECT_DIR/.env"
+set +a
+
+# Validate minimum config
+if [ -z "$GATEWAY_SECRET" ]; then
+    fail "GATEWAY_SECRET is required in .env"
+    exit 1
+fi
+
+cleanup() {
+    echo ""
+    echo "Shutting down..."
+    kill $BACKEND_PID $FRONTEND_PID $GATEWAY_PID 2>/dev/null || true
+    wait $BACKEND_PID $FRONTEND_PID $GATEWAY_PID 2>/dev/null || true
+    echo "All services stopped."
+}
+trap cleanup EXIT INT TERM
+
+# ---- 1. LLM Gateway ----
+if $WITH_GATEWAY || $GATEWAY_ONLY; then
+    echo ""
+    echo "--- LLM Gateway ---"
+
+    # Kill old gateway if still running
+    lsof -ti:9000 2>/dev/null | xargs kill 2>/dev/null || true
+
+    # Unset proxy vars so httpx doesn't try to use a SOCKS proxy
+    unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy 2>/dev/null || true
+
+    GATEWAY_DIR="$PROJECT_DIR/services/llm-gateway"
+    VENV_PYTHON="$GATEWAY_DIR/.venv/bin/python3"
+
+    if [ ! -f "$VENV_PYTHON" ]; then
+        info "Creating virtual environment..."
+        python3 -m venv "$GATEWAY_DIR/.venv"
+    fi
+
+    if ! "$VENV_PYTHON" -c "import fastapi" 2>/dev/null; then
+        info "Installing Python dependencies..."
+        "$VENV_PYTHON" -m pip install -q -r "$GATEWAY_DIR/requirements.txt"
+    fi
+
+    info "Starting llm-gateway..."
+    cd "$GATEWAY_DIR"
+    "$VENV_PYTHON" -m src.main &
+    GATEWAY_PID=$!
+    cd "$PROJECT_DIR"
+
+    # Wait for gateway to be ready
+    info "Waiting for llm-gateway..."
+    for i in $(seq 1 20); do
+        if curl -s http://localhost:9000/health >/dev/null 2>&1; then
+            pass "LLM Gateway ready on http://localhost:9000"
+            break
+        fi
+        if ! kill -0 $GATEWAY_PID 2>/dev/null; then
+            fail "LLM Gateway failed to start. Check the error above."
+            exit 1
+        fi
+        sleep 1
+    done
+fi
+
+if $GATEWAY_ONLY; then
+    echo ""
+    echo "LLM Gateway: http://localhost:9000"
+    echo "Press Ctrl+C to stop."
+    wait
+    exit 0
+fi
+
+# ---- 2. Agent Core (Rust backend) ----
+echo ""
+echo "--- Agent Core ---"
+
+# Kill old backend if still running
+lsof -ti:3000 2>/dev/null | xargs kill 2>/dev/null || true
+
+info "Building and starting agent-core..."
+cd "$PROJECT_DIR"
+cargo run -p agent-core &
+BACKEND_PID=$!
+
+# Wait for backend to be ready
+info "Waiting for agent-core..."
+for i in $(seq 1 30); do
+    if curl -s http://localhost:3000/health >/dev/null 2>&1; then
+        pass "Agent Core ready on http://localhost:3000"
+        break
+    fi
+    if ! kill -0 $BACKEND_PID 2>/dev/null; then
+        fail "Agent Core failed to start. Check the error above."
+        exit 1
+    fi
+    sleep 1
+done
+
+# ---- 3. Web UI (Vite frontend) ----
+echo ""
+echo "--- Web UI ---"
+
+# Kill old frontend if still running
+lsof -ti:5173 2>/dev/null | xargs kill 2>/dev/null || true
+
+# Check node_modules
+if [ ! -d "$PROJECT_DIR/apps/web-ui/node_modules" ]; then
+    info "Installing npm dependencies..."
+    cd "$PROJECT_DIR/apps/web-ui"
+    npm install
+    cd "$PROJECT_DIR"
+fi
+
+info "Starting web-ui..."
+cd "$PROJECT_DIR/apps/web-ui"
+npm run dev &
+FRONTEND_PID=$!
+cd "$PROJECT_DIR"
+
+echo ""
+echo "================================================"
+echo "  Backend:     http://localhost:3000"
+echo "  Frontend:    http://localhost:5173"
+if $WITH_GATEWAY; then
+    echo "  LLM Gateway: http://localhost:9000"
+fi
+echo "================================================"
+echo "Press Ctrl+C to stop all services."
+echo ""
+
+wait

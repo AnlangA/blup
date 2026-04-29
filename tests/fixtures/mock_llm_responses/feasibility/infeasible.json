@@ -1,0 +1,6 @@
+{
+  "feasible": false,
+  "reason": "This goal is too broad to teach effectively.",
+  "suggestions": ["Choose a specific language", "Pick a project type"],
+  "estimated_duration": "N/A"
+}

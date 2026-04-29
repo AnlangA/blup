@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blup.dev/schemas/chapter.v1.schema.json",
+  "title": "Chapter",
+  "type": "object",
+  "version": "1.0.0",
+  "required": ["id", "title", "order", "objectives"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 100,
+      "description": "URL-safe chapter identifier"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 300
+    },
+    "order": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "objectives": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 500 },
+      "minItems": 1,
+      "maxItems": 10
+    },
+    "prerequisites": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 200 },
+      "maxItems": 10
+    },
+    "content": {
+      "type": "string",
+      "maxLength": 100000,
+      "description": "Chapter content in Markdown format"
+    },
+    "estimated_minutes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 480
+    },
+    "key_concepts": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 200 },
+      "maxItems": 30
+    },
+    "exercises": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "question": { "type": "string", "maxLength": 2000 },
+          "type": {
+            "type": "string",
+            "enum": ["multiple_choice", "short_answer", "coding", "reflection"]
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": ["easy", "medium", "hard"]
+          }
+        },
+        "required": ["question", "type"]
+      },
+      "maxItems": 20
+    }
+  }
+}

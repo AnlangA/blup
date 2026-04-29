@@ -1,0 +1,20 @@
+{
+  "experience_level": {
+    "domain_knowledge": "beginner",
+    "related_domains": ["excel", "data analysis"],
+    "years_of_experience": 0
+  },
+  "learning_style": {
+    "preferred_format": ["exercise-based", "text"],
+    "pace_preference": "moderate"
+  },
+  "available_time": {
+    "hours_per_week": 5,
+    "preferred_session_length_minutes": 45,
+    "timezone": "UTC"
+  },
+  "goals": {
+    "primary_goal": "Automate Excel workflows with Python",
+    "success_criteria": "Can read, clean, and visualize data from CSV files"
+  }
+}

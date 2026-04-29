@@ -1,0 +1,11 @@
+event: status
+data: {"state": "FEASIBILITY_CHECK", "message": "Checking feasibility..."}
+
+event: chunk
+data: {"content": "Let me analyze ", "index": 0}
+
+event: chunk
+data: {"content": "your learning goal.", "index": 1}
+
+event: done
+data: {"feasible": true, "reason": "Well-scoped goal"}

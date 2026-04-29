@@ -1,0 +1,30 @@
+{
+  "title": "Python for Data Analysis: From Excel to pandas",
+  "description": "A hands-on curriculum that bridges Excel knowledge to Python data analysis.",
+  "chapters": [
+    {
+      "id": "python-basics",
+      "title": "Python Basics for Data Work",
+      "order": 1,
+      "objectives": ["Install Python and Jupyter", "Understand variables and data types", "Write basic expressions"],
+      "prerequisites": [],
+      "estimated_minutes": 45
+    },
+    {
+      "id": "data-structures",
+      "title": "Lists, Dictionaries, and DataFrames",
+      "order": 2,
+      "objectives": ["Work with Python lists and dicts", "Understand tabular data concepts", "Create your first pandas DataFrame"],
+      "prerequisites": ["python-basics"],
+      "estimated_minutes": 50
+    }
+  ],
+  "estimated_duration": "4-6 weeks (5 hrs/week)",
+  "prerequisites_summary": ["Basic computer skills", "Familiarity with Excel"],
+  "learning_objectives": [
+    "Read CSV and Excel files into Python",
+    "Clean and filter data with pandas",
+    "Create summary statistics and aggregations",
+    "Build basic data visualizations with matplotlib"
+  ]
+}

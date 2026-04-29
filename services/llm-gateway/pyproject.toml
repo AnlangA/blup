@@ -1,0 +1,22 @@
+[project]
+name = "blup-llm-gateway"
+version = "0.1.0"
+description = "Blup LLM Gateway — wraps OpenAI and Anthropic APIs for agent-core"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=1.55.0,<2.0.0",
+    "anthropic>=0.40.0,<1.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.8.0",
+    "tenacity>=8.5.0",
+    "structlog>=24.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+]

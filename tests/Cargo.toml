@@ -1,0 +1,9 @@
+[package]
+name = "blup-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+agent-core = { path = "../crates/agent-core" }
+serde_json = "1"

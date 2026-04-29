@@ -1,0 +1,7 @@
+{
+  "feasible": true,
+  "reason": "Python data analysis with pandas is a well-scoped goal. The learner has relevant context (Excel) which provides a practical bridge.",
+  "suggestions": [],
+  "estimated_duration": "4-6 weeks",
+  "prerequisites": ["basic computer literacy", "understanding of tabular data"]
+}

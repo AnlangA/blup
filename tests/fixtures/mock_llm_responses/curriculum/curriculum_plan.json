@@ -1,0 +1,9 @@
+{
+  "title": "Python for Data Analysis",
+  "chapters": [
+    {"id": "ch1", "title": "Introduction", "order": 1, "objectives": ["Get started"]},
+    {"id": "ch2", "title": "Core Concepts", "order": 2, "objectives": ["Learn fundamentals"]},
+    {"id": "ch3", "title": "Practice", "order": 3, "objectives": ["Apply knowledge"]}
+  ],
+  "estimated_duration": "4-6 weeks"
+}

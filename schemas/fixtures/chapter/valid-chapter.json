@@ -1,0 +1,10 @@
+{
+  "id": "python-basics",
+  "title": "Python Basics for Data Work",
+  "order": 1,
+  "objectives": ["Install Python and Jupyter", "Understand variables and data types"],
+  "prerequisites": [],
+  "content": "## Welcome to Python Basics\n\nIn this chapter you will learn the fundamentals of Python programming.",
+  "estimated_minutes": 45,
+  "key_concepts": ["variables", "data types", "expressions"]
+}

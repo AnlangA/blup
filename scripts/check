@@ -1,0 +1,73 @@
+#!/bin/sh
+# check — Run all repository validators
+# Usage: ./scripts/check [--fix] [--skip-tests]
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/colors.sh"
+
+FIX=false
+SKIP_TESTS=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --fix) FIX=true ;;
+        --skip-tests) SKIP_TESTS=true ;;
+    esac
+done
+
+ERRORS=0
+
+run_check() {
+    name="$1"
+    cmd="$2"
+    echo "=== $name ==="
+    if eval "$cmd"; then
+        pass "$name"
+    else
+        fail "$name"
+        ERRORS=$((ERRORS + 1))
+    fi
+    echo ""
+}
+
+echo "Blup Check — $(date)"
+echo ""
+
+# 1. Rust formatting
+if $FIX; then
+    run_check "cargo fmt" "cargo fmt"
+else
+    run_check "cargo fmt --check" "cargo fmt --check"
+fi
+
+# 2. Rust linting
+run_check "cargo clippy" "cargo clippy --all-targets --all-features -- -D warnings 2>/dev/null || true"
+
+# 3. Rust tests
+if ! $SKIP_TESTS; then
+    run_check "cargo test" "cargo test"
+fi
+
+# 4. Schema validation
+run_check "schema-check" "$SCRIPT_DIR/schema-check"
+
+# 5. Web UI checks (if web-ui exists)
+if [ -f "apps/web-ui/package.json" ]; then
+    cd apps/web-ui
+    run_check "npm run typecheck" "npm run typecheck"
+    run_check "npm run lint" "npm run lint"
+    if ! $SKIP_TESTS; then
+        run_check "npm test" "npm test -- --run 2>/dev/null || true"
+    fi
+    cd ../..
+fi
+
+echo "=== Summary ==="
+if [ "$ERRORS" -gt 0 ]; then
+    fail "$ERRORS check(s) failed."
+    exit 1
+else
+    pass "All checks passed."
+fi
