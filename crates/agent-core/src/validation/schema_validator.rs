@@ -39,7 +39,7 @@ impl SchemaValidator {
         schema_name: &str,
     ) -> Result<Arc<jsonschema::Validator>, ValidationError> {
         {
-            let cache = self.cache.read().unwrap();
+            let cache = self.cache.read().expect("RwLock poisoned");
             if let Some(compiled) = cache.get(schema_name) {
                 return Ok(Arc::clone(compiled));
             }
@@ -64,7 +64,7 @@ impl SchemaValidator {
             })?;
 
         let compiled = Arc::new(compiled);
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self.cache.write().expect("RwLock poisoned");
         cache.insert(schema_name.to_string(), Arc::clone(&compiled));
 
         Ok(compiled)
@@ -101,7 +101,7 @@ impl SchemaValidator {
     }
 
     pub fn clear_cache(&self) {
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self.cache.write().expect("RwLock poisoned");
         cache.clear();
     }
 }

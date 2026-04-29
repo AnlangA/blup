@@ -30,6 +30,23 @@ impl StateMachine {
         self.current_state
     }
 
+    /// Create a new state machine starting from a given state.
+    pub fn with_state(state: SessionState) -> Self {
+        Self {
+            current_state: state,
+            previous_state: None,
+            transition_history: Vec::new(),
+        }
+    }
+
+    pub fn previous_state(&self) -> Option<SessionState> {
+        self.previous_state
+    }
+
+    pub fn set_previous_state(&mut self, state: SessionState) {
+        self.previous_state = Some(state);
+    }
+
     pub fn transition(&mut self, transition: Transition) -> Result<SessionState, StateError> {
         let next_state = self.validate_transition(&transition)?;
 
@@ -59,6 +76,7 @@ impl StateMachine {
             (GoalInput, SubmitGoal) => FeasibilityCheck,
             (FeasibilityCheck, GoalFeasible) => ProfileCollection,
             (FeasibilityCheck, GoalInfeasible) => GoalInput,
+            (ProfileCollection, ProfileContinue) => ProfileCollection,
             (ProfileCollection, ProfileComplete) => CurriculumPlanning,
             (CurriculumPlanning, CurriculumReady) => ChapterLearning,
             (ChapterLearning, ChapterComplete) => ChapterLearning,

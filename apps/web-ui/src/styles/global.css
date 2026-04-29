@@ -359,6 +359,16 @@ button.secondary {
 .completion-screen .summary { color: var(--color-text-secondary); margin: 0.5rem 0; }
 .completion-screen .actions { margin-top: 2rem; }
 
+/* ---- Loading Screen ---- */
+.loading-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-size: 1.2rem;
+  color: var(--color-text-secondary);
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 1024px) {
   .chat-window { display: none; }

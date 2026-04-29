@@ -1,0 +1,9 @@
+[package]
+name = "schema-validator"
+version = "0.1.0"
+edition = "2021"
+description = "Validates JSON Schema files and fixture data against those schemas"
+
+[dependencies]
+jsonschema = "0.46"
+serde_json = "1"

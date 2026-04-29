@@ -33,6 +33,7 @@ pub enum Transition {
     SubmitGoal,
     GoalFeasible,
     GoalInfeasible,
+    ProfileContinue,
     ProfileComplete,
     CurriculumReady,
     ChapterComplete,

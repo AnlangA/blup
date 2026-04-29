@@ -1,23 +1,25 @@
 import { useState } from 'react';
 import { useSessionStore } from '../../state/sessionStore';
+import { useSubmitGoal } from '../../hooks/query';
 
 export function GoalInput() {
-  const submitGoal = useSessionStore((s) => s.submitGoal);
+  const sessionId = useSessionStore((s) => s.sessionId);
+  const submitGoal = useSubmitGoal(sessionId);
   const [description, setDescription] = useState('');
   const [domain, setDomain] = useState('');
   const [context, setContext] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!description || !domain) return;
-    setLoading(true);
-    try {
-      await submitGoal({ description, domain, context: context || undefined });
-    } finally {
-      setLoading(false);
-    }
+    submitGoal.mutate({
+      description,
+      domain,
+      context: context || undefined,
+    });
   };
+
+  const loading = submitGoal.isPending;
 
   return (
     <div className="goal-input-container">
@@ -54,6 +56,11 @@ export function GoalInput() {
             placeholder="Any background about why you want to learn this"
           />
         </div>
+        {submitGoal.isError && (
+          <p className="error-text">
+            {submitGoal.error?.message || 'Failed to submit goal'}
+          </p>
+        )}
         <button type="submit" disabled={loading || !description || !domain}>
           {loading ? 'Checking...' : 'Start Learning'}
         </button>

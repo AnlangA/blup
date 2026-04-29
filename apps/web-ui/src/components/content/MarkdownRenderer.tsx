@@ -10,6 +10,9 @@ import rehypeExpressiveCode from 'rehype-expressive-code';
 import rehypeStringify from 'rehype-stringify';
 import type { PluggableList } from 'unified';
 
+const CACHE_MAX = 20;
+const renderCache = new Map<string, string>();
+
 const rehypePlugins: PluggableList = [
   [rehypeRaw],
   [rehypeKatex],
@@ -18,6 +21,9 @@ const rehypePlugins: PluggableList = [
 ];
 
 async function renderMarkdown(content: string): Promise<string> {
+  const cached = renderCache.get(content);
+  if (cached) return cached;
+
   const file = await unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -26,7 +32,15 @@ async function renderMarkdown(content: string): Promise<string> {
     .use(rehypePlugins)
     .process(content);
 
-  return String(file);
+  const result = String(file);
+
+  if (renderCache.size >= CACHE_MAX) {
+    const first = renderCache.keys().next().value;
+    if (first !== undefined) renderCache.delete(first);
+  }
+  renderCache.set(content, result);
+
+  return result;
 }
 
 function executeScripts(container: HTMLElement) {
@@ -83,7 +97,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   if (error) {
     return (
       <div className="markdown-body" style={{ color: 'red' }}>
-        <h3>渲染错误</h3>
+        <h3>Render Error</h3>
         <pre>{error}</pre>
       </div>
     );

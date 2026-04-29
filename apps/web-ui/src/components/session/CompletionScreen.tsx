@@ -1,16 +1,20 @@
 import { useSessionStore } from '../../state/sessionStore';
+import { useCurriculum } from '../../hooks/query';
 
 export function CompletionScreen() {
+  const sessionId = useSessionStore((s) => s.sessionId);
   const reset = useSessionStore((s) => s.reset);
-  const chapters = useSessionStore((s) => s.chapters);
+  const { data: curriculum } = useCurriculum(sessionId);
+
+  const chapterCount = curriculum?.chapters?.length ?? 0;
 
   return (
     <div className="completion-screen">
       <h1>Congratulations!</h1>
       <p>You've completed all chapters in this curriculum.</p>
-      {chapters.length > 0 && (
+      {chapterCount > 0 && (
         <p className="summary">
-          {chapters.length} chapter{chapters.length !== 1 ? 's' : ''} completed
+          {chapterCount} chapter{chapterCount !== 1 ? 's' : ''} completed
         </p>
       )}
       <div className="actions">
