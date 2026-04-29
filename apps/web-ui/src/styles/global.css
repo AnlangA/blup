@@ -168,28 +168,29 @@ button.secondary {
   font-size: 0.88em;
   border: 1px solid var(--color-border);
 }
-.markdown-body .code-block {
+.markdown-body pre {
   margin: 1.25rem 0;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  overflow: hidden;
 }
-.code-block-header {
-  background: var(--color-bg-secondary);
-  padding: 0.4rem 1rem;
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-  border-bottom: 1px solid var(--color-border);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.code-block pre {
+.markdown-body pre code {
+  display: block;
   padding: 1rem;
   overflow-x: auto;
   font-family: var(--font-mono);
   font-size: 0.85rem;
   line-height: 1.6;
-  margin: 0;
+}
+.theme-selector {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text);
+  z-index: 10;
 }
 .markdown-body blockquote {
   margin: 1rem 0;
