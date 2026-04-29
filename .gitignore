@@ -1,5 +1,6 @@
 # Rust / Cargo
 /target/
+/.claude
 **/*.rs.bk
 Cargo.lock
 
@@ -52,6 +53,9 @@ Thumbs.db
 # Debug
 *.log
 logs/
+
+# Session persistence data
+data/
 
 # Sandbox outputs
 sandbox_output/

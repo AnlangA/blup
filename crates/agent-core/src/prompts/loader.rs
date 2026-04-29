@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -15,9 +16,11 @@ pub enum PromptError {
 ///
 /// Shared partials in `shared/` (persona, safety rules, output format) are
 /// loaded once and automatically prepended to every rendered prompt.
+/// Templates are cached in memory after first load.
 pub struct PromptLoader {
     templates_dir: PathBuf,
     shared_partials: Vec<String>,
+    cache: RwLock<HashMap<String, String>>,
 }
 
 impl PromptLoader {
@@ -27,6 +30,7 @@ impl PromptLoader {
         Self {
             templates_dir,
             shared_partials,
+            cache: RwLock::new(HashMap::new()),
         }
     }
 
@@ -34,7 +38,6 @@ impl PromptLoader {
         let shared_dir = dir.join("shared");
         let mut partials = Vec::new();
 
-        // Order matters: persona, then safety, then output format
         let ordered = ["persona", "safety_rules", "output_format_guide"];
         for name in &ordered {
             let filename = format!("{}.partial.md", name);
@@ -48,7 +51,6 @@ impl PromptLoader {
             }
         }
 
-        // Also load any additional .partial.md files not in the ordered list
         if shared_dir.exists() {
             if let Ok(entries) = std::fs::read_dir(&shared_dir) {
                 for entry in entries.flatten() {
@@ -71,10 +73,17 @@ impl PromptLoader {
         partials
     }
 
-    /// Load a prompt template by name and version.
-    ///
-    /// Looks for `{name}.v{version}.prompt.md` in the templates directory.
-    pub fn load(&self, name: &str, version: u32) -> Result<String, PromptError> {
+    /// Load a prompt template by name and version, with caching.
+    fn load_inner(&self, name: &str, version: u32) -> Result<String, PromptError> {
+        let cache_key = format!("{}.v{}", name, version);
+
+        {
+            let cache = self.cache.read().expect("RwLock poisoned");
+            if let Some(cached) = cache.get(&cache_key) {
+                return Ok(cached.clone());
+            }
+        }
+
         let filename = format!("{}.v{}.prompt.md", name, version);
         let path = self.templates_dir.join(&filename);
 
@@ -86,26 +95,32 @@ impl PromptLoader {
         }
 
         let template = std::fs::read_to_string(path)?;
-        Ok(template.trim().to_string())
+        let trimmed = template.trim().to_string();
+
+        let mut cache = self.cache.write().expect("RwLock poisoned");
+        cache.insert(cache_key, trimmed.clone());
+
+        Ok(trimmed)
+    }
+
+    /// Load a prompt template by name and version.
+    pub fn load(&self, name: &str, version: u32) -> Result<String, PromptError> {
+        self.load_inner(name, version)
     }
 
     /// Load a prompt and render it with variable substitution.
     ///
     /// Combines shared partials + the prompt template, then substitutes
     /// `{{variable_name}}` placeholders with provided values.
-    ///
-    /// Variable values are HTML-escaped to prevent prompt injection via user
-    /// input fields (the LLM reads markdown, not HTML, so this is safe).
     pub fn load_and_render(
         &self,
         name: &str,
         version: u32,
         vars: &HashMap<String, String>,
     ) -> Result<String, PromptError> {
-        let template = self.load(name, version)?;
+        let template = self.load_inner(name, version)?;
         let mut parts: Vec<&str> = Vec::new();
 
-        // Prepend shared partials as system context
         for partial in &self.shared_partials {
             parts.push(partial.as_str());
         }
@@ -119,9 +134,6 @@ impl PromptLoader {
     }
 
     /// Render variables into a template string.
-    ///
-    /// Replaces `{{key}}` with the corresponding value. Missing keys are
-    /// left as-is (literal `{{key}}`) to surface the issue to the LLM.
     pub fn render(&self, template: &str, vars: &HashMap<String, String>) -> String {
         Self::render_template(template, vars)
     }
@@ -129,8 +141,6 @@ impl PromptLoader {
     fn render_template(template: &str, vars: &HashMap<String, String>) -> String {
         let mut result = template.to_string();
         for (key, value) in vars {
-            // Escape the value to prevent accidental markdown/JSON injection.
-            // This is a basic defense — the schema validator is the real gate.
             let escaped = html_escape(value);
             let placeholder = format!("{{{{{}}}}}", key);
             result = result.replace(&placeholder, &escaped);
@@ -138,16 +148,14 @@ impl PromptLoader {
         result
     }
 
-    /// Reload shared partials (useful during development if partials change).
+    /// Reload shared partials and clear cache (useful during development).
     pub fn reload_partials(&mut self) {
         self.shared_partials = Self::load_shared_partials(&self.templates_dir);
+        self.cache.write().expect("RwLock poisoned").clear();
     }
 }
 
 /// Minimal HTML-escaping for user-provided values inserted into prompts.
-/// Escapes `<`, `>`, `&`, `"`. Does NOT escape `{`/`}` because those are
-/// template syntax, not HTML — they are handled separately by ensuring
-/// variable values don't contain `{{`.
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")

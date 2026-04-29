@@ -80,7 +80,7 @@ rate_limiter = RateLimiter(settings.rate_limit_per_minute)
 # ---------------------------------------------------------------------------
 
 
-async def complete_with_retry(provider, request: GatewayRequest) -> GatewayRequest:
+async def complete_with_retry(provider, request: GatewayRequest) -> "GatewayResponse":
     """Call provider.complete with exponential-backoff retries on transient errors."""
     last_exc: Exception | None = None
     for attempt in range(settings.max_retries + 1):
@@ -207,48 +207,6 @@ async def gateway_complete(
                     error_body = await e.response.text()
                     if error_body:
                         error_message = f"{error_message}: {error_body}"
-                except:
-                    pass
-            raise HTTPException(502, f"LLM provider error: {error_message}")
-
-    provider = select_provider(request.model)
-
-    if request.stream:
-
-        async def generate():
-            try:
-                async for chunk in complete_stream_with_retry(provider, request):
-                    yield f"event: chunk\ndata: {chunk.model_dump_json()}\n\n"
-                yield "event: done\ndata: {}\n\n"
-            except asyncio.CancelledError:
-                logger.info("stream_cancelled", model=request.model)
-            except Exception as e:
-                logger.error("stream_error", error=str(e), model=request.model)
-                error_data = json.dumps(
-                    {
-                        "code": "STREAM_ERROR",
-                        "message": "An error occurred during streaming.",
-                    }
-                )
-                yield f"event: error\ndata: {error_data}\n\n"
-
-        return StreamingResponse(
-            generate(),
-            media_type="text/event-stream",
-        )
-    else:
-        try:
-            response = await complete_with_retry(provider, request)
-            return response.model_dump()
-        except Exception as e:
-            logger.error("completion_error", error=str(e), model=request.model)
-            error_message = str(e)
-            # Try to extract more useful error info
-            if hasattr(e, "response"):
-                try:
-                    error_body = await e.response.text()
-                    if error_body:
-                        error_message = f"{error_message}: {error_body}"
-                except:
+                except Exception:
                     pass
             raise HTTPException(502, f"LLM provider error: {error_message}")

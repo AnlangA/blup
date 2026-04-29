@@ -19,8 +19,10 @@ pub struct Config {
     pub llm_model: String,
     pub prompts_dir: PathBuf,
     pub schemas_dir: PathBuf,
+    pub data_dir: PathBuf,
     pub log_format: String,
     pub max_sessions: usize,
+    pub session_ttl_hours: u64,
     pub sse_ping_interval_secs: u64,
 }
 
@@ -34,8 +36,10 @@ impl std::fmt::Debug for Config {
             .field("llm_model", &self.llm_model)
             .field("prompts_dir", &self.prompts_dir)
             .field("schemas_dir", &self.schemas_dir)
+            .field("data_dir", &self.data_dir)
             .field("log_format", &self.log_format)
             .field("max_sessions", &self.max_sessions)
+            .field("session_ttl_hours", &self.session_ttl_hours)
             .field("sse_ping_interval_secs", &self.sse_ping_interval_secs)
             .finish()
     }
@@ -51,8 +55,10 @@ impl Default for Config {
             llm_model: "gpt-4o".to_string(),
             prompts_dir: PathBuf::from("prompts"),
             schemas_dir: PathBuf::from("schemas"),
+            data_dir: PathBuf::from("data"),
             log_format: "pretty".to_string(),
             max_sessions: 1000,
+            session_ttl_hours: 24,
             sse_ping_interval_secs: 15,
         }
     }
@@ -89,6 +95,23 @@ impl Config {
         }
         if let Ok(fmt) = std::env::var("BLUP_LOG_FORMAT") {
             config.log_format = fmt;
+        }
+        if let Ok(max) = std::env::var("BLUP_MAX_SESSIONS") {
+            match max.parse::<usize>() {
+                Ok(n) => config.max_sessions = n,
+                Err(_) => tracing::warn!(value = %max, "Invalid BLUP_MAX_SESSIONS, using default"),
+            }
+        }
+        if let Ok(dir) = std::env::var("BLUP_DATA_DIR") {
+            config.data_dir = PathBuf::from(dir);
+        }
+        if let Ok(ttl) = std::env::var("BLUP_SESSION_TTL_HOURS") {
+            match ttl.parse::<u64>() {
+                Ok(h) => config.session_ttl_hours = h,
+                Err(_) => {
+                    tracing::warn!(value = %ttl, "Invalid BLUP_SESSION_TTL_HOURS, using default")
+                }
+            }
         }
 
         config

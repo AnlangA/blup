@@ -1,6 +1,10 @@
+use std::time::Duration;
+
+use futures::Stream;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio_stream::StreamExt;
 
 #[derive(Clone)]
 pub struct LlmClient {
@@ -40,6 +44,14 @@ pub struct GatewayUsage {
     pub total_tokens: u32,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct StreamChunk {
+    pub content: String,
+    pub index: u32,
+    #[serde(default)]
+    pub finish_reason: Option<String>,
+}
+
 #[derive(Debug, Error)]
 pub enum LlmError {
     #[error("HTTP error: {0}")]
@@ -63,8 +75,16 @@ pub enum LlmError {
 
 impl LlmClient {
     pub fn new(gateway_url: String, gateway_secret: String) -> Self {
+        let http = Client::builder()
+            .timeout(Duration::from_secs(60))
+            .pool_max_idle_per_host(4)
+            .pool_idle_timeout(Duration::from_secs(90))
+            .tcp_keepalive(Duration::from_secs(60))
+            .build()
+            .expect("Failed to build HTTP client");
+
         Self {
-            http: Client::new(),
+            http,
             gateway_url,
             gateway_secret,
         }
@@ -95,7 +115,6 @@ impl LlmClient {
         if !response.status().is_success() {
             let body = response.text().await.unwrap_or_default();
             tracing::error!(status = status, body = %body, "Gateway returned error");
-            // Try to parse error message from JSON response
             let error_msg = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
                 json.get("detail")
                     .and_then(|v| v.as_str())
@@ -114,7 +133,6 @@ impl LlmClient {
 
         let response_text = response.text().await?;
         let truncated = if response_text.len() > 500 {
-            // Find a valid char boundary at or before 500
             let mut end = 500.min(response_text.len());
             while end > 0 && !response_text.is_char_boundary(end) {
                 end -= 1;
@@ -129,5 +147,66 @@ impl LlmClient {
             tracing::error!(error = %e, response = %truncated, "Failed to parse Gateway response");
             LlmError::JsonParse(e.to_string())
         })
+    }
+
+    /// Stream chunks from the gateway via SSE.
+    /// Returns a stream of parsed `StreamChunk` values.
+    pub fn stream(
+        &self,
+        request: GatewayRequest,
+    ) -> impl Stream<Item = Result<StreamChunk, LlmError>> {
+        let http = self.http.clone();
+        let url = format!("{}/v1/gateway/complete", self.gateway_url);
+        let secret = self.gateway_secret.clone();
+
+        async_stream::stream! {
+            let response = match http
+                .post(&url)
+                .header("X-Gateway-Secret", &secret)
+                .json(&request)
+                .send()
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    yield Err(LlmError::GatewayUnavailable(e.to_string()));
+                    return;
+                }
+            };
+
+            let status = response.status().as_u16();
+            if !response.status().is_success() {
+                let body = response.text().await.unwrap_or_default();
+                yield Err(LlmError::GatewayError { status, body });
+                return;
+            }
+
+            let mut byte_stream = response.bytes_stream();
+            let mut buffer = String::new();
+            while let Some(result) = byte_stream.next().await {
+                match result {
+                    Ok(bytes) => {
+                        buffer.push_str(&String::from_utf8_lossy(&bytes));
+                        // Parse complete lines from buffer
+                        while let Some(pos) = buffer.find('\n') {
+                            let line = buffer[..pos].to_string();
+                            buffer = buffer[pos + 1..].to_string();
+                            if let Some(data) = line.strip_prefix("data: ") {
+                                if data == "{}" {
+                                    continue; // done event
+                                }
+                                if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
+                                    yield Ok(chunk);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        yield Err(LlmError::Http(e));
+                        return;
+                    }
+                }
+            }
+        }
     }
 }

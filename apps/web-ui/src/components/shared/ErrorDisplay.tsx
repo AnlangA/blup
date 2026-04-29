@@ -1,18 +1,24 @@
 import { useSessionStore } from '../../state/sessionStore';
+import { useCreateSession } from '../../hooks/query';
 
 export function ErrorDisplay() {
-  const error = useSessionStore((s) => s.error);
   const reset = useSessionStore((s) => s.reset);
-  const createSession = useSessionStore((s) => s.createSession);
+  const createSession = useCreateSession();
 
   return (
     <div className="error-display" role="alert">
       <h3>Something went wrong</h3>
-      <p>{error?.message || 'An unexpected error occurred'}</p>
-      {error?.code && <code className="error-code">Code: {error.code}</code>}
+      <p>An unexpected error occurred. Please try again.</p>
       <div className="error-actions">
-        <button onClick={() => createSession()}>Retry</button>
-        <button className="secondary" onClick={reset}>Start Over</button>
+        <button
+          onClick={() => createSession.mutate()}
+          disabled={createSession.isPending}
+        >
+          Retry
+        </button>
+        <button className="secondary" onClick={reset}>
+          Start Over
+        </button>
       </div>
     </div>
   );

@@ -1,22 +1,29 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { MarkdownRenderer } from '../content/MarkdownRenderer';
-import { api } from '../../api/client';
 import { useSessionStore } from '../../state/sessionStore';
+import { useSession, useAskQuestion } from '../../hooks/query';
+
+interface ChatMessage {
+  id: string;
+  role: string;
+  content: string;
+  timestamp: string;
+}
 
 export function ChatWindow() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const currentChapterId = useSessionStore((s) => s.currentChapterId);
-  const chapterChatMessages = useSessionStore((s) => s.chapterChatMessages);
-  const addChatMessage = useSessionStore((s) => s.addChatMessage);
+  const { data: session } = useSession(sessionId);
+  const askQuestion = useAskQuestion(sessionId, currentChapterId);
+
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Get messages for current chapter
-  const messages = useMemo(() => {
-    return currentChapterId ? (chapterChatMessages[currentChapterId] || []) : [];
-  }, [currentChapterId, chapterChatMessages]);
+  // Messages come from backend session snapshot, filtered by current chapter
+  const messages: ChatMessage[] = ((session?.messages ?? []) as ChatMessage[]).filter(
+    (m) => !currentChapterId || (m as unknown as Record<string, unknown>).chapter_id === currentChapterId,
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -30,53 +37,21 @@ export function ChatWindow() {
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
   }, [input]);
 
-  const handleSend = useCallback(async () => {
+  const handleSend = useCallback(() => {
     if (!sessionId || !currentChapterId || !input.trim()) return;
-    const question = input.trim();
+    askQuestion.mutate(input.trim());
     setInput('');
-    setLoading(true);
+  }, [sessionId, currentChapterId, input, askQuestion]);
 
-    const userMsg = {
-      id: crypto.randomUUID(),
-      role: 'user' as const,
-      content: question,
-      timestamp: new Date().toISOString(),
-    };
-
-    // Add user message to chapter chat
-    addChatMessage(currentChapterId, userMsg);
-
-    try {
-      const result = await api.askQuestion(sessionId, currentChapterId, question);
-      const assistantMsg = {
-        id: (result.id as string) || crypto.randomUUID(),
-        role: 'assistant' as const,
-        content: (result.content as string) || 'I couldn\'t process that question.',
-        timestamp: (result.timestamp as string) || new Date().toISOString(),
-      };
-      // Add assistant message to chapter chat
-      addChatMessage(currentChapterId, assistantMsg);
-    } catch (err) {
-      console.error('Failed to get answer:', err);
-      const errorMsg = {
-        id: crypto.randomUUID(),
-        role: 'assistant' as const,
-        content: 'Sorry, I encountered an error processing your question. Please try again.',
-        timestamp: new Date().toISOString(),
-      };
-      // Add error message to chapter chat
-      addChatMessage(currentChapterId, errorMsg);
-    } finally {
-      setLoading(false);
-    }
-  }, [sessionId, currentChapterId, input, addChatMessage]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [handleSend]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    },
+    [handleSend],
+  );
 
   return (
     <div className="chat-window">
@@ -91,7 +66,7 @@ export function ChatWindow() {
             </div>
           </div>
         ))}
-        {loading && (
+        {askQuestion.isPending && (
           <div className="message assistant">
             <div className="message-avatar">🤖</div>
             <div className="message-body typing-indicator">Thinking...</div>
@@ -101,7 +76,10 @@ export function ChatWindow() {
       </div>
       <form
         className="chat-input-form"
-        onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSend();
+        }}
       >
         <textarea
           ref={textareaRef}
@@ -110,10 +88,13 @@ export function ChatWindow() {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ask a question about this chapter..."
-          disabled={loading}
+          disabled={askQuestion.isPending}
           aria-label="Question input"
         />
-        <button type="submit" disabled={loading || !input.trim()}>
+        <button
+          type="submit"
+          disabled={askQuestion.isPending || !input.trim()}
+        >
           Send
         </button>
       </form>

@@ -8,15 +8,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  BLUP_ENV: ci
 
 jobs:
   backend:
     name: Backend (Rust)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -36,30 +32,13 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: Test
         run: cargo test --workspace
 
-  schemas:
-    name: Schema validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate schemas
-        run: python3 -m json.tool schemas/*.schema.json > /dev/null
-
-      - name: Validate fixtures
-        run: |
-          for dir in schemas/fixtures/*/; do
-            for f in "$dir"*.json; do
-              python3 -m json.tool "$f" > /dev/null || { echo "Invalid JSON: $f"; exit 1; }
-            done
-          done
-
-      - name: Run schema-check
-        run: bash scripts/schema-check
+      - name: Schema check (Rust validator)
+        run: cargo run --bin schema-validator -- schemas
 
   frontend:
     name: Frontend (TypeScript)
@@ -83,7 +62,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
-        continue-on-error: true
+
+      - name: Unit tests
+        run: npm test
 
       - name: Build
         run: npm run build

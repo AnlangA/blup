@@ -1,10 +1,16 @@
 import { useSessionStore } from '../../state/sessionStore';
+import { useSession } from '../../hooks/query';
+import type { FeasibilityData } from '../../api/client';
 
 export function FeasibilityResult() {
-  const feasibility = useSessionStore((s) => s.feasibility);
-  const state = useSessionStore((s) => s.state);
+  const sessionId = useSessionStore((s) => s.sessionId);
+  const { data: session } = useSession(sessionId);
   const reset = useSessionStore((s) => s.reset);
-  const setState = useSessionStore((s) => s.setState);
+
+  const state = session?.state ?? 'IDLE';
+  const feasibility = session?.feasibility_result as unknown as
+    | FeasibilityData
+    | null;
 
   if (state !== 'FEASIBILITY_CHECK' && state !== 'PROFILE_COLLECTION') {
     return null;
@@ -30,10 +36,11 @@ export function FeasibilityResult() {
           <p className="reason">{feasibility.reason}</p>
           {feasibility.estimated_duration && (
             <p className="meta">
-              Estimated duration: <strong>{feasibility.estimated_duration}</strong>
+              Estimated duration:{' '}
+              <strong>{feasibility.estimated_duration}</strong>
             </p>
           )}
-          {feasibility.prerequisites.length > 0 && (
+          {feasibility.prerequisites?.length > 0 && (
             <div className="suggestions">
               <p>Prerequisites:</p>
               <ul>
@@ -43,15 +50,12 @@ export function FeasibilityResult() {
               </ul>
             </div>
           )}
-          <button onClick={() => setState('PROFILE_COLLECTION')}>
-            Continue to Profile Setup
-          </button>
         </div>
       ) : (
         <div className="result-card warning">
           <p className="verdict">Let's refine your goal</p>
           <p className="reason">{feasibility.reason}</p>
-          {feasibility.suggestions.length > 0 && (
+          {feasibility.suggestions?.length > 0 && (
             <div className="suggestions">
               <p>Suggestions:</p>
               <ul>
