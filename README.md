@@ -8,8 +8,8 @@ The project is in planning and early scaffold stage. The immediate target is **P
 
 | Phase | Goal | Status |
 | --- | --- | --- |
-| Phase 0 | Repository foundation, validation, scripts, observability policy | Planned |
-| Phase 1 | Web learning assistant: goal feasibility → profile → curriculum → chapter teaching | Planned |
+| Phase 0 | Repository foundation, validation, scripts, observability policy | Complete |
+| Phase 1 | Web learning assistant: goal feasibility → profile → curriculum → chapter teaching | Complete |
 | Phase 2 | Exercises, assessment, sandboxed execution, persistence | Planned |
 | Phase 2.5 | Desktop packaging, source import, Typst/PDF export | Planned |
 | Phase 3 | Plugin system and Bevy interactive scenes | Planned |

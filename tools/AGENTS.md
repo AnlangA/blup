@@ -8,9 +8,9 @@
 
 ### Phase 0 and Phase 1 deliverables
 
-- Schema validation tool or script.
-- Bootstrap script that checks required development tools.
-- Repository check script that runs the available validators.
+- `schema-check`: Validate all schema files and fixtures in CI (implemented as `scripts/schema-check`).
+- `bootstrap`: Verify required development tools (implemented as `scripts/bootstrap`).
+- `check`: Run all repository validators (implemented as `scripts/check`).
 
 ### Future deliverables
 
@@ -33,7 +33,6 @@
 
 | Tool | Phase | Purpose |
 | --- | --- | --- |
-| `schema-validator` | Phase 1 | Validate JSON payloads against schemas |
 | `schema-check` | Phase 1 | Validate all schema files and fixtures in CI |
 | `bootstrap` | Phase 0 | Check Rust, Node, package manager, and phase-specific tools |
 | `check` | Phase 0 | Run formatters, linters, tests, and schema checks |

@@ -1,22 +1,21 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { MarkdownRenderer } from '../content/MarkdownRenderer';
 import { api } from '../../api/client';
 import { useSessionStore } from '../../state/sessionStore';
 
-interface Message {
-  id: string;
-  role: string;
-  content: string;
-  timestamp: string;
-}
-
 export function ChatWindow() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const currentChapterId = useSessionStore((s) => s.currentChapterId);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const chapterChatMessages = useSessionStore((s) => s.chapterChatMessages);
+  const addChatMessage = useSessionStore((s) => s.addChatMessage);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Get messages for current chapter
+  const messages = useMemo(() => {
+    return currentChapterId ? (chapterChatMessages[currentChapterId] || []) : [];
+  }, [currentChapterId, chapterChatMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,29 +27,40 @@ export function ChatWindow() {
     setInput('');
     setLoading(true);
 
-    const userMsg: Message = {
+    const userMsg = {
       id: crypto.randomUUID(),
-      role: 'user',
+      role: 'user' as const,
       content: question,
       timestamp: new Date().toISOString(),
     };
-    setMessages((prev) => [...prev, userMsg]);
+
+    // Add user message to chapter chat
+    addChatMessage(currentChapterId, userMsg);
 
     try {
       const result = await api.askQuestion(sessionId, currentChapterId, question);
-      const assistantMsg: Message = {
+      const assistantMsg = {
         id: (result.id as string) || crypto.randomUUID(),
-        role: 'assistant',
+        role: 'assistant' as const,
         content: (result.content as string) || 'I couldn\'t process that question.',
         timestamp: (result.timestamp as string) || new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch {
-      // error handled by store
+      // Add assistant message to chapter chat
+      addChatMessage(currentChapterId, assistantMsg);
+    } catch (err) {
+      console.error('Failed to get answer:', err);
+      const errorMsg = {
+        id: crypto.randomUUID(),
+        role: 'assistant' as const,
+        content: 'Sorry, I encountered an error processing your question. Please try again.',
+        timestamp: new Date().toISOString(),
+      };
+      // Add error message to chapter chat
+      addChatMessage(currentChapterId, errorMsg);
     } finally {
       setLoading(false);
     }
-  }, [sessionId, currentChapterId, input]);
+  }, [sessionId, currentChapterId, input, addChatMessage]);
 
   return (
     <div className="chat-window">

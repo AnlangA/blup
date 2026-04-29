@@ -6,6 +6,9 @@ use agent_core::{llm, prompts, server, state, validation, AppState, Config};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Load .env file from project root
+    dotenvy::dotenv().ok();
+
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()

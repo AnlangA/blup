@@ -156,6 +156,35 @@ async fn llm_json(
     Ok(parsed)
 }
 
+async fn llm_text(
+    state: &AppState,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<String, String> {
+    let request = GatewayRequest {
+        model: state.config.llm_model.clone(),
+        messages: vec![system_msg(system_prompt), user_msg(user_prompt)],
+        temperature: Some(0.3),
+        max_tokens: Some(4096),
+        stream: false,
+    };
+
+    let response = state
+        .llm
+        .complete(request)
+        .await
+        .map_err(|e| format!("LLM error: {e}"))?;
+
+    tracing::info!(
+        model = %response.model,
+        tokens = response.usage.total_tokens,
+        content_length = response.content.len(),
+        "LLM text call completed"
+    );
+
+    Ok(response.content)
+}
+
 fn extract_json(raw: &str) -> String {
     let trimmed = raw.trim();
     if let Some(inner) = trimmed
@@ -525,6 +554,31 @@ async fn start_chapter(
         )));
     }
 
+    // Check cache first
+    if let Some(cached_content) = session.chapter_contents.get(&ch_id).cloned() {
+        tracing::info!(chapter_id = %ch_id, "Returning cached chapter content");
+        let mut session = session;
+        session.current_chapter_id = Some(ch_id);
+        save(&state, session).await;
+
+        return Ok(Json(json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "role": "assistant",
+            "content": cached_content,
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        })));
+    }
+
+    // Get chapter info from curriculum
+    let chapter_info = session.curriculum.as_ref().and_then(|c| {
+        c.get("chapters").and_then(|chapters| {
+            chapters.as_array().and_then(|arr| {
+                arr.iter()
+                    .find(|ch| ch.get("id").and_then(|v| v.as_str()) == Some(&ch_id))
+            })
+        })
+    });
+
     let profile = session.profile.clone().unwrap_or_else(|| {
         json!({
             "experience_level": {"domain_knowledge": "beginner"},
@@ -546,21 +600,34 @@ async fn start_chapter(
         .load_and_render("chapter_teaching", 1, &vars)
         .map_err(|_| internal_error("Failed to load chapter prompt"))?;
 
-    let user_prompt = format!("Start teaching chapter: {ch_id}");
+    let chapter_title = chapter_info
+        .and_then(|c| c.get("title"))
+        .and_then(|v| v.as_str())
+        .unwrap_or(&ch_id);
 
-    let chapter = llm_json(&state, &system_prompt, &user_prompt, "chapter")
+    let user_prompt = format!("Start teaching chapter: {chapter_title}");
+
+    // Use llm_text for markdown content
+    let content = llm_text(&state, &system_prompt, &user_prompt)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Chapter teaching failed");
             internal_error(&e)
         })?;
 
+    // Cache the content
     let mut session = state.store.get(id).await.ok_or_else(not_found)?;
-    session.current_chapter_id = Some(ch_id);
-    session.messages.push(chapter.clone());
+    session.current_chapter_id = Some(ch_id.clone());
+    session.chapter_contents.insert(ch_id, content.clone());
     save(&state, session).await;
 
-    Ok(Json(chapter))
+    // Return as message format
+    Ok(Json(json!({
+        "id": uuid::Uuid::new_v4().to_string(),
+        "role": "assistant",
+        "content": content,
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    })))
 }
 
 // ---- ask_question ----
@@ -613,12 +680,20 @@ async fn ask_question(
 
     let user_prompt = format!("Question: {}", question.question);
 
-    let message = llm_json(&state, &system_prompt, &user_prompt, "message")
+    // Use llm_text for markdown content
+    let content = llm_text(&state, &system_prompt, &user_prompt)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Question answering failed");
             internal_error(&e)
         })?;
+
+    let message = json!({
+        "id": uuid::Uuid::new_v4().to_string(),
+        "role": "assistant",
+        "content": content,
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    });
 
     let mut session = state.store.get(id).await.ok_or_else(not_found)?;
     session.messages.push(message.clone());

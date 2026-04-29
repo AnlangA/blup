@@ -18,9 +18,15 @@ router = APIRouter()
 
 providers: list = []
 if settings.openai_api_key:
-    providers.append(OpenAIProvider(settings.openai_api_key, base_url=settings.openai_base_url))
+    providers.append(
+        OpenAIProvider(settings.openai_api_key, base_url=settings.openai_base_url)
+    )
 if settings.anthropic_api_key:
-    providers.append(AnthropicProvider(settings.anthropic_api_key, base_url=settings.anthropic_base_url))
+    providers.append(
+        AnthropicProvider(
+            settings.anthropic_api_key, base_url=settings.anthropic_base_url
+        )
+    )
 
 
 def select_provider(model: str):
@@ -38,6 +44,7 @@ def select_provider(model: str):
 # ---------------------------------------------------------------------------
 # Simple in-process rate limiter (token bucket per second, reset per minute)
 # ---------------------------------------------------------------------------
+
 
 class RateLimiter:
     """Token-bucket rate limiter keyed by a string (e.g. IP or secret hash)."""
@@ -71,6 +78,7 @@ rate_limiter = RateLimiter(settings.rate_limit_per_minute)
 # ---------------------------------------------------------------------------
 # Retry helper
 # ---------------------------------------------------------------------------
+
 
 async def complete_with_retry(provider, request: GatewayRequest) -> GatewayRequest:
     """Call provider.complete with exponential-backoff retries on transient errors."""
@@ -139,6 +147,13 @@ async def gateway_complete(
     if not request.messages:
         raise HTTPException(400, "messages must not be empty")
 
+    logger.info(
+        "gateway_request",
+        model=request.model,
+        messages_count=len(request.messages),
+        stream=request.stream,
+    )
+
     # Rate limit by secret hash (not the secret itself, since we don't want
     # to keep secrets in memory structures longer than needed).
     rate_key = str(hash(x_gateway_secret))
@@ -177,9 +192,63 @@ async def gateway_complete(
     else:
         try:
             response = await complete_with_retry(provider, request)
+            logger.info(
+                "gateway_response",
+                model=request.model,
+                content_length=len(response.content),
+            )
             return response.model_dump()
         except Exception as e:
             logger.error("completion_error", error=str(e), model=request.model)
-            raise HTTPException(
-                502, "LLM provider returned an error. Please try again."
-            )
+            error_message = str(e)
+            # Try to extract more useful error info
+            if hasattr(e, "response"):
+                try:
+                    error_body = await e.response.text()
+                    if error_body:
+                        error_message = f"{error_message}: {error_body}"
+                except:
+                    pass
+            raise HTTPException(502, f"LLM provider error: {error_message}")
+
+    provider = select_provider(request.model)
+
+    if request.stream:
+
+        async def generate():
+            try:
+                async for chunk in complete_stream_with_retry(provider, request):
+                    yield f"event: chunk\ndata: {chunk.model_dump_json()}\n\n"
+                yield "event: done\ndata: {}\n\n"
+            except asyncio.CancelledError:
+                logger.info("stream_cancelled", model=request.model)
+            except Exception as e:
+                logger.error("stream_error", error=str(e), model=request.model)
+                error_data = json.dumps(
+                    {
+                        "code": "STREAM_ERROR",
+                        "message": "An error occurred during streaming.",
+                    }
+                )
+                yield f"event: error\ndata: {error_data}\n\n"
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+        )
+    else:
+        try:
+            response = await complete_with_retry(provider, request)
+            return response.model_dump()
+        except Exception as e:
+            logger.error("completion_error", error=str(e), model=request.model)
+            error_message = str(e)
+            # Try to extract more useful error info
+            if hasattr(e, "response"):
+                try:
+                    error_body = await e.response.text()
+                    if error_body:
+                        error_message = f"{error_message}: {error_body}"
+                except:
+                    pass
+            raise HTTPException(502, f"LLM provider error: {error_message}")

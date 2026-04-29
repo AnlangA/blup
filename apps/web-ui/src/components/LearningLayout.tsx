@@ -4,19 +4,21 @@ import { ChatWindow } from './chat/ChatWindow';
 import { MarkdownRenderer } from './content/MarkdownRenderer';
 
 export function LearningLayout() {
-  const messages = useSessionStore((s) => s.messages);
+  const chapterContent = useSessionStore((s) => s.chapterContent);
   const currentChapterId = useSessionStore((s) => s.currentChapterId);
-
-  const lastAssistantMsg = [...messages]
-    .reverse()
-    .find((m) => m.role === 'assistant');
 
   return (
     <div className="learning-layout">
       <CurriculumSidebar />
       <main className="chapter-content">
-        {lastAssistantMsg && currentChapterId ? (
-          <MarkdownRenderer content={lastAssistantMsg.content} />
+        {currentChapterId ? (
+          chapterContent ? (
+            <MarkdownRenderer content={chapterContent} />
+          ) : (
+            <div className="welcome-content">
+              <p>Loading chapter content...</p>
+            </div>
+          )
         ) : (
           <div className="welcome-content">
             <h2>Welcome to Your Learning Journey</h2>

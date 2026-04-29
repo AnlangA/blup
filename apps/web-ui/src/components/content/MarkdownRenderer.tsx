@@ -1,6 +1,8 @@
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
 import 'katex/dist/katex.min.css';
 
 interface MarkdownRendererProps {
@@ -11,8 +13,8 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
     <div className="markdown-body">
       <ReactMarkdown
-        remarkPlugins={[remarkMath]}
-        rehypePlugins={[rehypeKatex]}
+        remarkPlugins={[remarkMath, remarkGfm]}
+        rehypePlugins={[rehypeKatex, rehypeRaw]}
         components={{
           code({ className, children, ...props }) {
             const match = /language-(\w+)/.exec(className || '');
@@ -43,6 +45,13 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
               >
                 {children}
               </a>
+            );
+          },
+          table({ children }) {
+            return (
+              <div style={{ overflowX: 'auto' }}>
+                <table>{children}</table>
+              </div>
             );
           },
         }}

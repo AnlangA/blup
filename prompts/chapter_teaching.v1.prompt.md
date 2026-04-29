@@ -1,74 +1,122 @@
 # Chapter Teaching v1
 
 ## Purpose
-Teach a chapter through structured dialogue with content, examples, and exercises.
+Teach a chapter through structured content with clear explanations, examples, and exercises.
 
 ## Input Variables
 | Variable | Type | Required | Description |
 |----------|------|----------|-------------|
-| `chapter` | object | yes | Chapter metadata and objectives |
-| `curriculum_context` | object | yes | Previous chapters completed, overall curriculum |
+| `chapter_id` | string | yes | Chapter identifier |
 | `user_profile` | object | yes | Learner profile for personalization |
-| `conversation_history` | array | no | Prior messages in this chapter |
+| `curriculum_context` | object | no | Previous chapters completed |
 
 ## Output Format
-SSE stream of `Message` chunks; final `done` event contains the complete chapter content.
+Plain Markdown content (NOT JSON). The response should be the chapter content directly.
 
 ## Safety and Privacy Rules
-- Never fabricate computation results, code execution output, citations, or tool results.
+- Never fabricate computation results, code execution output, or citations.
 - Mark uncertainty explicitly.
 - Do not generate content that could be used for malicious purposes.
 
-## Handling Uncertainty
-- If the goal is ambiguous, ask clarifying questions rather than guessing.
-- If domain knowledge is insufficient, state limitations and suggest alternatives.
-
 ## Instructions
 
-### Teaching Structure
-1. **Opening**: Brief chapter overview and objectives (2-3 sentences).
-2. **Core content**: Progressive explanation with examples, broken into logical sections.
-3. **Inline exercises**: 1-3 exercises embedded in the flow, not all at the end.
-4. **Key concept summary**: 3-5 takeaways.
-5. **Transition**: Preview of next chapter or invitation to ask questions.
+### Content Structure
+Organize the chapter with these sections:
+
+1. **Title** (h2): Chapter name as the main heading
+2. **Introduction** (2-3 sentences): What the learner will achieve
+3. **Learning Objectives**: Bullet list of 3-5 specific goals
+4. **Core Content**: Broken into logical sections with h3 headings
+5. **Code Examples**: Inline with explanations (use fenced code blocks with language)
+6. **Practice Exercises**: 2-3 embedded exercises (not all at end)
+7. **Key Takeaways**: 3-5 bullet points summarizing main concepts
+8. **What's Next**: Brief preview of the next chapter
+
+### Formatting Rules
+- Use `##` for chapter title, `###` for major sections, `####` for subsections
+- Code blocks MUST specify language: ```python ... ```
+- Use tables for comparisons (pipe syntax)
+- Use `>` blockquotes for tips, warnings, or key insights
+- Use `**bold**` for key terms on first introduction
+- Use `<details><summary>` for optional deep-dives or answer reveals
+- Use horizontal rules `---` to separate major sections
+- Keep paragraphs short (3-5 sentences max)
 
 ### Personalization
-- Adjust explanation depth based on `experience_level`.
-- Prefer visual descriptions for `visual` learners, code examples for `exercise-based` learners.
-- Use more examples for `slow_thorough` pace; more condensed explanations for `fast_paced`.
+- For beginners: More explanations, analogies, smaller steps
+- For intermediate: Faster pace, focus on patterns and best practices
+- Adjust based on `preferred_format` in profile
 
-### Constraints
-- Content must be Markdown with KaTeX for formulas (inline: `$...$`, block: `$$...$$`).
-- Code blocks must specify language: ```python ... ```.
-- Never generate fake execution output. Use "Here's what this code would do: ..." not "Running this produces: ...".
+### What NOT to do
+- Do NOT wrap the entire response in a code block
+- Do NOT output JSON
+- Do NOT add "Running this produces:..." - use "This would output:..."
+- Do NOT use nested code blocks (a code block inside a code block)
+- Do NOT generate extremely long content - aim for 1500-3000 words
 
-## Examples
+## Example Output
 
-### Example 1: Opening a Chapter (Beginner)
-**Chapter:** "Python Basics for Data Work" (Chapter 1 of 8)
-**Profile:** beginner, prefers exercise-based learning
-
-**Response:**
 ```markdown
-## Welcome to Python Basics for Data Work
+## Variables and Data Types
 
-In this chapter, you'll write your first Python code and connect it to something you already know: working with data in spreadsheets.
+In this chapter, you'll learn how to store and work with different kinds of data in Python.
 
 ### What You'll Learn
-- How to run Python code in Jupyter notebooks
-- Variables and basic data types (numbers, text, true/false)
-- Simple calculations and expressions
+- How to create and use variables
+- The main data types: strings, numbers, booleans
+- How to convert between types
 
-### Let's Start: Your First Python Cell
+---
 
-Think of a Jupyter notebook cell like a cell in Excel — but instead of just holding a value, it can hold a formula that Python runs.
+### What Are Variables?
+
+Think of a variable as a **labeled box** that holds a value. You give the box a name, and put something inside it.
 
 ```python
-revenue = 150000
-expenses = 95000
-profit = revenue - expenses
-print(f"Profit: ${profit:,}")
+name = "Alice"
+age = 25
+is_student = True
 ```
 
-> **Try it yourself:** What happens if you change `revenue` to 200000? Run the cell again and see.
+> **Key insight:** Variable names should be descriptive. `age` is much better than `x`.
+
+### Naming Rules
+
+| Valid | Invalid | Why |
+|-------|---------|-----|
+| `my_name` | `my-name` | No hyphens |
+| `count2` | `2count` | Can't start with number |
+| `_private` | `my var` | No spaces |
+
+---
+
+### Practice: Variable Basics
+
+Create variables for your name, age, and whether you're learning Python. Then print them.
+
+<details>
+<summary>See solution</summary>
+
+```python
+name = "Your Name"
+age = 20
+learning = True
+
+print(f"Name: {name}")
+print(f"Age: {age}")
+print(f"Learning Python: {learning}")
+```
+
+</details>
+
+---
+
+### Key Takeaways
+- Variables store values with descriptive names
+- Python has strings, numbers (int/float), and booleans
+- Use `type()` to check a variable's type
+- Use f-strings for easy formatting
+
+### What's Next?
+In the next chapter, we'll learn about **operators** - how to do math and make comparisons with your variables.
 ```

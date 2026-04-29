@@ -83,7 +83,7 @@ Do not hard-code personal paths, tokens, or machine-specific configuration in sc
 | `prompts/` | Versioned prompt templates for feasibility checks, profile collection, curriculum planning, chapter teaching, and chapter Q&A |
 | `apps/web-ui` | React or Svelte SPA with chat, curriculum sidebar, chapter content area, Markdown, KaTeX, and CodeMirror 6 |
 | `tests/` | Integration tests for the core learning flow, HTTP API behavior, SSE behavior, and schema validation |
-| `tools/` | Schema validation tool or script |
+| `tools/` | Schema validation script (`schema-check`), bootstrap, and check commands |
 
 ### Phase 1 API contract
 
