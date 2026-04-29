@@ -21,6 +21,7 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/api/session", post(create_session))
+        .route("/api/session/:id", get(get_session_status))
         .route("/api/session/:id/goal", post(submit_goal))
         .route("/api/session/:id/goal/stream", post(submit_goal_stream))
         .route(
@@ -217,6 +218,24 @@ async fn create_session(
         session_id: session.id.to_string(),
         state: session.state().to_string(),
     }))
+}
+
+async fn get_session_status(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
+    let session = load_or_404(&state, id).await?;
+    Ok(Json(json!({
+        "session_id": session.id.to_string(),
+        "state": session.state().to_string(),
+        "goal": session.goal,
+        "feasibility_result": session.feasibility_result,
+        "profile": session.profile,
+        "curriculum": session.curriculum,
+        "current_chapter_id": session.current_chapter_id,
+        "chapter_contents": serde_json::to_value(&session.chapter_contents).unwrap_or(json!({})),
+        "messages": session.messages,
+    })))
 }
 
 // ---- submit_goal ----
