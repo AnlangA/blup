@@ -1,17 +1,19 @@
 # Crates Module — Phase 2: Storage, Assessment Engine, LLM Gateway
 
+> **Current State (April 2026)**: Phase 1 `agent-core` is complete as a single monolithic crate. The Python LLM Gateway is implemented at `services/llm-gateway/` (not yet split into a separate Rust crate). The `storage` and `assessment-engine` crates have not been started. This plan describes the intended Phase 2 architecture.
+
 ## Module Overview
 
-Phase 2 splits `agent-core` into specialized components. Two new Rust crates join the workspace: `storage` and `assessment-engine`. The `llm-gateway` evolves as an enhanced Python service (continuing from Phase 1's Python LLM Gateway) rather than a Rust crate — it gains caching, advanced retry, and multi-model routing using the official `openai` and `anthropic` packages.
+Phase 2 splits `agent-core` into specialized components. Two new Rust crates join the workspace: `storage` and `assessment-engine`. The `llm-gateway` already exists as a Python service (`services/llm-gateway/`) — it gains caching, advanced retry, and multi-model routing using the official `openai` and `anthropic` packages.
 
 ## Phase 2 Scope
 
 | Component | Language | Purpose | Status |
 |-----------|----------|---------|--------|
-| `agent-core` | Rust | Core orchestration, HTTP API, state machine (continues) | Evolving |
-| `storage` | Rust | Persistent database access (SQLite for dev, PostgreSQL for prod) | Planned |
-| `assessment-engine` | Rust | Exercise generation, rubric-based answer evaluation, scoring | Planned |
-| `llm-gateway` | Python | Enhanced LLM gateway: caching, advanced retry, multi-model routing, cost tracking | Evolving |
+| `agent-core` | Rust | Core orchestration, HTTP API, state machine | **Completed** (Phase 1 core — still monolithic) |
+| `llm-gateway` | Python | LLM gateway: OpenAI + Anthropic providers | **Implemented** (`services/llm-gateway/`) |
+| `storage` | Rust | Persistent database access (SQLite for dev, PostgreSQL for prod) | Not Started |
+| `assessment-engine` | Rust | Exercise generation, rubric-based answer evaluation, scoring | Not Started |
 
 ## Crate: storage
 
@@ -1018,8 +1020,8 @@ assessment-engine = { path = "../assessment-engine" }
 - [ ] SQLite is the default for dev; PostgreSQL for CI and production
 - [ ] Session data survives restarts
 - [ ] Assessment engine never runs learner code directly (delegates to sandbox)
-- [ ] LLM gateway supports both OpenAI and Anthropic providers
+- [x] LLM gateway supports both OpenAI and Anthropic providers
 - [ ] Retry logic has exponential backoff with jitter
 - [ ] No API keys or raw prompts in gateway logs
 - [ ] Crate dependency graph is acyclic (no circular dependencies)
-- [ ] All crates pass `cargo fmt --check`, `cargo clippy`, `cargo test`
+- [x] All crates pass `cargo fmt --check`, `cargo clippy`, `cargo test`

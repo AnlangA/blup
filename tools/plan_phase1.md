@@ -1,5 +1,7 @@
 # Tools Module — Phase 1: Schema Validator
 
+> **Phase 1 Status**: All other Phase 1 modules (agent-core, web-ui, schemas, prompts, llm-gateway, tests, dev scripts) are complete. This schema-validator CLI is the only remaining Phase 1 deliverable.
+
 ## Module Overview
 
 Phase 1 adds the `schema-validator` tool — a Rust binary that validates JSON Schema files for syntax correctness and validates fixture files against their schemas. This is the programmatic equivalent of the Phase 0 shell-based `schema-check` script, providing proper JSON Schema validation using the `jsonschema` crate.
@@ -8,7 +10,7 @@ Phase 1 adds the `schema-validator` tool — a Rust binary that validates JSON S
 
 | Deliverable | Description | Status |
 |-------------|-------------|--------|
-| `tools/schema-validator/` | Rust CLI that validates schemas and fixtures | Planned |
+| `tools/schema-validator/` | Rust CLI that validates schemas and fixtures | Not Started |
 
 ## File Structure
 

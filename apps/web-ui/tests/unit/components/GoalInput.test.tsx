@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { GoalInput } from '../../src/components/session/GoalInput';
+import { GoalInput } from '../../../src/components/session/GoalInput';
 
 // Mock the session store
-vi.mock('../../src/state/sessionStore', () => ({
+vi.mock('../../../src/state/sessionStore', () => ({
   useSessionStore: vi.fn(() => ({
     submitGoal: vi.fn(),
   })),
