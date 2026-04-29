@@ -10,6 +10,7 @@ import { LearningLayout } from './components/LearningLayout';
 
 function App() {
   const sessionId = useSessionStore((s) => s.sessionId);
+  const reset = useSessionStore((s) => s.reset);
   const createSession = useCreateSession();
 
   // Create session on first load if none exists
@@ -19,10 +20,24 @@ function App() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Get server state
-  const { data: session } = useSession(
-    createSession.isSuccess ? sessionId : null,
-  );
+  // Always try to restore the session if we have an ID (from localStorage or
+  // newly created).  enable only when we have a real session ID.
+  const {
+    data: session,
+    isError: sessionError,
+    error: sessionErr,
+  } = useSession(sessionId);
+
+  // If the session query failed with NOT_FOUND (e.g. stale session after
+  // backend restart), clear the stale ID and create a new session.
+  useEffect(() => {
+    const code = (sessionErr as { code?: string } | null)?.code;
+    if (sessionError && code === 'NOT_FOUND') {
+      reset();
+      createSession.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionError]);
 
   // Derive state from backend
   const state = session?.state ?? 'IDLE';

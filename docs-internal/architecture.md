@@ -2,7 +2,7 @@
 
 > Canonical architecture reference for the Blup AI interactive learning-agent platform.
 >
-> Last updated: Current planning phase (Phase 0 / early Phase 1).
+> Last updated: Post-Phase 1 (April 2026).
 
 ---
 

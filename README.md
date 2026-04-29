@@ -4,7 +4,7 @@ Blup is an AI interactive learning-agent platform. A learner enters a goal, the 
 
 ## Current Status
 
-The project is in planning and early scaffold stage. The immediate target is **Phase 1: a single-user web learning assistant MVP**.
+Phase 1 (single-user web learning assistant MVP) is complete. The next target is **Phase 2: exercises, assessment, sandboxed execution, and persistence**.
 
 | Phase | Goal | Status |
 | --- | --- | --- |
