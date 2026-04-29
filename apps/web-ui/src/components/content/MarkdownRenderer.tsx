@@ -1,38 +1,42 @@
-import { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { useState, useEffect, useRef } from 'react';
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
+import remarkRehype from 'remark-rehype';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import rehypeExpressiveCode from 'rehype-expressive-code';
-import 'katex/dist/katex.min.css';
+import rehypeStringify from 'rehype-stringify';
+import type { PluggableList } from 'unified';
 
-const THEMES = ['github-dark', 'github-light', 'dracula', 'nord'] as const;
-type Theme = (typeof THEMES)[number];
+const rehypePlugins: PluggableList = [
+  [rehypeRaw],
+  [rehypeKatex],
+  [rehypeExpressiveCode],
+  [rehypeStringify],
+];
 
-const rehypeExpressiveCodeOptions = {
-  themes: [...THEMES],
-  themeCssSelector: (theme: { name: string }) => `[data-theme='${theme.name}']`,
-};
+async function renderMarkdown(content: string): Promise<string> {
+  const file = await unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkMath)
+    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypePlugins)
+    .process(content);
 
-function ThemeSelector() {
-  const [theme, setTheme] = useState<Theme>('github-dark');
+  return String(file);
+}
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
-
-  return (
-    <select
-      className="theme-selector"
-      value={theme}
-      onChange={(e) => setTheme(e.target.value as Theme)}
-    >
-      {THEMES.map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
-  );
+function executeScripts(container: HTMLElement) {
+  const scripts = container.querySelectorAll('script[type="module"]');
+  scripts.forEach((oldScript) => {
+    const newScript = document.createElement('script');
+    newScript.type = 'module';
+    newScript.textContent = oldScript.textContent;
+    oldScript.replaceWith(newScript);
+  });
 }
 
 interface MarkdownRendererProps {
@@ -40,50 +44,54 @@ interface MarkdownRendererProps {
 }
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+  const [html, setHtml] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    renderMarkdown(content)
+      .then((result) => {
+        if (!cancelled) {
+          setHtml(result);
+          setLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          console.error('Markdown render error:', err);
+          setError(err instanceof Error ? err.message : 'Unknown error');
+          setLoading(false);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [content]);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      executeScripts(containerRef.current);
+    }
+  }, [html]);
+
+  if (loading) {
+    return <div className="markdown-body"><p>Loading...</p></div>;
+  }
+
+  if (error) {
+    return (
+      <div className="markdown-body" style={{ color: 'red' }}>
+        <h3>渲染错误</h3>
+        <pre>{error}</pre>
+      </div>
+    );
+  }
+
   return (
     <div className="markdown-body">
-      <ThemeSelector />
-      <ReactMarkdown
-        remarkPlugins={[remarkMath, remarkGfm]}
-        rehypePlugins={[
-          rehypeKatex,
-          rehypeRaw,
-          [rehypeExpressiveCode, rehypeExpressiveCodeOptions],
-        ]}
-        components={{
-          code({ className, children, ...props }) {
-            const match = /language-(\w+)/.exec(className || '');
-            const inline = !match;
-
-            if (inline) {
-              return <code className="inline-code" {...props}>{children}</code>;
-            }
-
-            return <code className={className} {...props}>{children}</code>;
-          },
-          a({ href, children }) {
-            const isExternal = href?.startsWith('http');
-            return (
-              <a
-                href={href}
-                target={isExternal ? '_blank' : undefined}
-                rel={isExternal ? 'noopener noreferrer' : undefined}
-              >
-                {children}
-              </a>
-            );
-          },
-          table({ children }) {
-            return (
-              <div style={{ overflowX: 'auto' }}>
-                <table>{children}</table>
-              </div>
-            );
-          },
-        }}
-      >
-        {content}
-      </ReactMarkdown>
+      <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   );
 }

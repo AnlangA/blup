@@ -1,15 +1,63 @@
+import { useState, useRef, useCallback } from 'react';
 import { useSessionStore } from '../state/sessionStore';
 import { CurriculumSidebar } from './curriculum/CurriculumSidebar';
 import { ChatWindow } from './chat/ChatWindow';
 import { MarkdownRenderer } from './content/MarkdownRenderer';
 
+const SIDEBAR_DEFAULT = 260;
+const SIDEBAR_MIN = 180;
+const SIDEBAR_MAX = 500;
+const CHAT_DEFAULT = 380;
+const CHAT_MIN = 280;
+const CHAT_MAX = 600;
+
 export function LearningLayout() {
   const chapterContent = useSessionStore((s) => s.chapterContent);
   const currentChapterId = useSessionStore((s) => s.currentChapterId);
 
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
+  const [chatWidth, setChatWidth] = useState(CHAT_DEFAULT);
+  const dragging = useRef<'sidebar' | 'chat' | null>(null);
+
+  const onResizeStart = useCallback((panel: 'sidebar' | 'chat') => (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = panel;
+    let lastX = e.clientX;
+
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - lastX;
+      lastX = ev.clientX;
+
+      if (dragging.current === 'sidebar') {
+        setSidebarWidth((w) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w + delta)));
+      } else {
+        setChatWidth((w) => Math.min(CHAT_MAX, Math.max(CHAT_MIN, w - delta)));
+      }
+    };
+
+    const onUp = () => {
+      dragging.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
+
   return (
-    <div className="learning-layout">
+    <div
+      className="learning-layout"
+      style={{
+        gridTemplateColumns: `${sidebarWidth}px 4px 1fr 4px ${chatWidth}px`,
+      }}
+    >
       <CurriculumSidebar />
+      <div className="resize-handle" onMouseDown={onResizeStart('sidebar')} />
       <main className="chapter-content">
         {currentChapterId ? (
           chapterContent ? (
@@ -26,6 +74,7 @@ export function LearningLayout() {
           </div>
         )}
       </main>
+      <div className="resize-handle" onMouseDown={onResizeStart('chat')} />
       <ChatWindow />
     </div>
   );

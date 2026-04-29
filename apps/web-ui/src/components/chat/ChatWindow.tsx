@@ -11,6 +11,7 @@ export function ChatWindow() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Get messages for current chapter
   const messages = useMemo(() => {
@@ -20,6 +21,14 @@ export function ChatWindow() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+  }, [input]);
 
   const handleSend = useCallback(async () => {
     if (!sessionId || !currentChapterId || !input.trim()) return;
@@ -62,6 +71,13 @@ export function ChatWindow() {
     }
   }, [sessionId, currentChapterId, input, addChatMessage]);
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend]);
+
   return (
     <div className="chat-window">
       <div className="messages-container">
@@ -87,10 +103,12 @@ export function ChatWindow() {
         className="chat-input-form"
         onSubmit={(e) => { e.preventDefault(); handleSend(); }}
       >
-        <input
-          type="text"
+        <textarea
+          ref={textareaRef}
+          rows={1}
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder="Ask a question about this chapter..."
           disabled={loading}
           aria-label="Question input"

@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { useSessionStore, Chapter } from '../../state/sessionStore';
+import { useSessionStore, Chapter, CodeTheme } from '../../state/sessionStore';
 import { api } from '../../api/client';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -40,6 +40,8 @@ export function CurriculumSidebar() {
   const chapters = useSessionStore((s) => s.chapters);
   const chapterCache = useSessionStore((s) => s.chapterCache);
   const chapterLoading = useSessionStore((s) => s.chapterLoading);
+  const codeTheme = useSessionStore((s) => s.codeTheme);
+  const setCodeTheme = useSessionStore((s) => s.setCodeTheme);
   const setChapters = useSessionStore((s) => s.setChapters);
   const setChapterContent = useSessionStore((s) => s.setChapterContent);
   const setChapterCache = useSessionStore((s) => s.setChapterCache);
@@ -134,7 +136,17 @@ export function CurriculumSidebar() {
 
   return (
     <aside className="curriculum-sidebar">
-      <h2>Curriculum</h2>
+      <div className="sidebar-title-row">
+        <h2>Curriculum</h2>
+        <select
+          className="theme-selector"
+          value={codeTheme}
+          onChange={(e) => setCodeTheme(e.target.value as CodeTheme)}
+        >
+          <option value="github-dark">Dark</option>
+          <option value="github-light">Light</option>
+        </select>
+      </div>
       {chapters.length === 0 ? (
         <p className="loading-text">Loading curriculum...</p>
       ) : (

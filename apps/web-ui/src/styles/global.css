@@ -22,7 +22,7 @@ body {
   line-height: 1.6;
 }
 
-#root { min-height: 100vh; }
+#root { height: 100vh; }
 
 /* ---- Forms ---- */
 .form-group { margin-bottom: 1.5rem; }
@@ -116,7 +116,8 @@ button.secondary {
 .learning-layout {
   display: grid;
   grid-template-columns: 260px 1fr 380px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .curriculum-sidebar {
@@ -124,8 +125,17 @@ button.secondary {
   border-right: 1px solid var(--color-border);
   padding: 1.5rem;
   overflow-y: auto;
+  min-height: 0;
 }
-.curriculum-sidebar h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+.curriculum-sidebar h2 { font-size: 1.1rem; }
+.sidebar-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.sidebar-title-row h2 { flex: 1; }
+.sidebar-title-row .theme-selector { flex-shrink: 0; }
 .curriculum-sidebar ul { list-style: none; }
 .curriculum-sidebar li {
   padding: 0.6rem 0.75rem;
@@ -146,7 +156,21 @@ button.secondary {
 .chapter-content {
   padding: 2rem;
   overflow-y: auto;
+  min-height: 0;
 }
+
+/* ---- Resize Handle ---- */
+.resize-handle {
+  background: transparent;
+  cursor: col-resize;
+  transition: background 0.15s;
+  user-select: none;
+}
+.resize-handle:hover {
+  background: var(--color-primary);
+  opacity: 0.3;
+}
+
 .welcome-content { text-align: center; margin-top: 4rem; color: var(--color-text-secondary); }
 
 /* ---- Markdown ---- */
@@ -180,9 +204,6 @@ button.secondary {
   line-height: 1.6;
 }
 .theme-selector {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
   background: var(--color-bg-secondary);
@@ -190,7 +211,6 @@ button.secondary {
   border-radius: 4px;
   cursor: pointer;
   color: var(--color-text);
-  z-index: 10;
 }
 .markdown-body blockquote {
   margin: 1rem 0;
@@ -257,7 +277,7 @@ button.secondary {
   border-left: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 0;
 }
 .messages-container {
   flex: 1;
@@ -292,12 +312,16 @@ button.secondary {
   padding: 1rem;
   border-top: 1px solid var(--color-border);
 }
-.chat-input-form input {
+.chat-input-form textarea {
   flex: 1;
   padding: 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   font-size: 0.95rem;
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  resize: none;
+  max-height: 200px;
 }
 .chat-input-form button {
   width: auto;
@@ -337,14 +361,9 @@ button.secondary {
 
 /* ---- Responsive ---- */
 @media (max-width: 1024px) {
-  .learning-layout {
-    grid-template-columns: 220px 1fr;
-  }
   .chat-window { display: none; }
 }
 @media (max-width: 768px) {
-  .learning-layout {
-    grid-template-columns: 1fr;
-  }
   .curriculum-sidebar { display: none; }
+  .chat-window { display: none; }
 }

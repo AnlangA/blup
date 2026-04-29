@@ -26,6 +26,8 @@ export interface FeasibilityData {
   prerequisites: string[];
 }
 
+export type CodeTheme = 'github-dark' | 'github-light';
+
 interface SessionStore {
   sessionId: string | null;
   state: SessionState;
@@ -40,6 +42,7 @@ interface SessionStore {
   chapterLoading: Record<string, boolean>;
   chapterChatMessages: Record<string, Array<{ id: string; role: string; content: string; timestamp: string }>>;
   messages: Array<{ id: string; role: string; content: string; timestamp: string }>;
+  codeTheme: CodeTheme;
 
   createSession: () => Promise<void>;
   submitGoal: (goal: { description: string; domain: string; context?: string }) => Promise<void>;
@@ -50,6 +53,7 @@ interface SessionStore {
   setChapterLoading: (chapterId: string, loading: boolean) => void;
   setChapters: (chapters: Chapter[]) => void;
   addChatMessage: (chapterId: string, message: { id: string; role: string; content: string; timestamp: string }) => void;
+  setCodeTheme: (theme: CodeTheme) => void;
   reset: () => void;
 }
 
@@ -67,6 +71,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   chapterLoading: {},
   chapterChatMessages: {},
   messages: [],
+  codeTheme: 'github-dark',
 
   createSession: async () => {
     try {
@@ -141,6 +146,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     });
   },
 
+  setCodeTheme: (codeTheme) => {
+    document.documentElement.setAttribute('data-theme', codeTheme);
+    set({ codeTheme });
+  },
+
   reset: () => {
     localStorage.removeItem('blup_session_id');
     set({
@@ -157,6 +167,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       chapterLoading: {},
       chapterChatMessages: {},
       messages: [],
+      codeTheme: 'github-dark',
     });
   },
 }));
