@@ -69,3 +69,8 @@ test-results/
 *.profdata
 lcov.info
 coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
