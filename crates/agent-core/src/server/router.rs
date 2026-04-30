@@ -6,7 +6,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::sse::{Event, KeepAlive, Sse},
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use serde_json::json;
@@ -18,6 +18,7 @@ use uuid::Uuid;
 use crate::llm::client::{GatewayMessage, GatewayRequest};
 use crate::models::types::*;
 use crate::state::session::SessionHandle;
+use crate::state::session::SessionListEntry;
 use crate::state::types::Transition;
 use crate::AppState;
 
@@ -28,7 +29,9 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/api/session", post(create_session))
+        .route("/api/sessions", get(list_sessions))
         .route("/api/session/:id", get(get_session_status))
+        .route("/api/session/:id", delete(delete_session))
         .route("/api/session/:id/goal", post(submit_goal))
         .route("/api/session/:id/goal/stream", post(submit_goal_stream))
         .route(
@@ -142,9 +145,9 @@ async fn llm_json(
 
     let json_str = extract_json(&response.content);
     let parsed: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+        let truncated: String = response.content.chars().take(400).collect();
         format!(
-            "LLM response was not valid JSON: {e}. Raw (truncated): {}",
-            &response.content[..response.content.len().min(400)]
+            "LLM response was not valid JSON: {e}. Raw (truncated): {truncated}"
         )
     })?;
 
@@ -242,6 +245,20 @@ async fn create_session(
         }
         None => Err(StatusCode::SERVICE_UNAVAILABLE),
     }
+}
+
+async fn list_sessions(
+    State(state): State<AppState>,
+) -> Json<Vec<SessionListEntry>> {
+    Json(state.store.list().await)
+}
+
+async fn delete_session(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    state.store.delete(id).await;
+    Ok(Json(json!({ "deleted": true })))
 }
 
 async fn get_session_status(
@@ -422,6 +439,7 @@ async fn submit_goal_stream(
 
     let stream = async_stream::stream! {
         yield Ok(Event::default()
+            .event("status")
             .id(next_sse_id())
             .data(serde_json::to_string(&SseEvent::Status {
                 state: "FEASIBILITY_CHECK".to_string(),
@@ -448,6 +466,7 @@ async fn submit_goal_stream(
                 Ok(chunk) => {
                     full_text.push_str(&chunk.content);
                     yield Ok(Event::default()
+                        .event("chunk")
                         .id(next_sse_id())
                         .data(serde_json::to_string(&SseEvent::Chunk {
                             content: chunk.content.clone(),
@@ -465,6 +484,7 @@ async fn submit_goal_stream(
         if has_error {
             tracing::error!(error = %error_msg, "Feasibility check stream failed");
             yield Ok(Event::default()
+                .event("error")
                 .id(next_sse_id())
                 .data(serde_json::to_string(&SseEvent::Error {
                     code: "LLM_ERROR".to_string(),
@@ -479,6 +499,7 @@ async fn submit_goal_stream(
             Ok(parsed) => {
                 if let Err(e) = state.validator.validate(&parsed, "feasibility_result") {
                     yield Ok(Event::default()
+                        .event("error")
                         .id(next_sse_id())
                         .data(serde_json::to_string(&SseEvent::Error {
                             code: "VALIDATION_ERROR".to_string(),
@@ -505,6 +526,7 @@ async fn submit_goal_stream(
                 }
 
                 yield Ok(Event::default()
+                    .event("done")
                     .id(next_sse_id())
                     .data(serde_json::to_string(&SseEvent::Done {
                         result: json!({
@@ -515,6 +537,7 @@ async fn submit_goal_stream(
             }
             Err(e) => {
                 yield Ok(Event::default()
+                    .event("error")
                     .id(next_sse_id())
                     .data(serde_json::to_string(&SseEvent::Error {
                         code: "PARSE_ERROR".to_string(),
@@ -818,7 +841,7 @@ async fn start_chapter_stream(
     // Check cache first — if content already exists, return it immediately
     // without calling the LLM. This also prevents cascading failures when
     // the SSE connection drops and reconnects.
-    let (chapter_title, profile_json) = {
+    let (cached, chapter_title, profile_json) = {
         let s = handle.read().await;
         let current = s.state();
         if current != crate::state::types::SessionState::ChapterLearning {
@@ -827,11 +850,8 @@ async fn start_chapter_stream(
             )));
         }
 
-<<<<<<< HEAD
         let cached = s.chapter_contents.get(&ch_id).cloned();
 
-=======
->>>>>>> 28498b0255c2f4ad7bac59cc72f6116dc1b87854
         let title = s
             .curriculum
             .as_ref()
@@ -853,55 +873,29 @@ async fn start_chapter_stream(
                 "available_time": {"hours_per_week": 5}
             })
         });
-<<<<<<< HEAD
 
         (cached, title, profile)
-=======
-        (title, profile)
-    };
-
-    let mut vars = HashMap::new();
-    vars.insert("chapter_id".to_string(), ch_id.clone());
-    vars.insert(
-        "user_profile".to_string(),
-        serde_json::to_string(&profile_json).unwrap_or_default(),
-    );
-    vars.insert("curriculum_context".to_string(), "{}".to_string());
-
-    let system_prompt = state
-        .prompts
-        .load_and_render("chapter_teaching", 1, &vars)
-        .map_err(|_| internal_error("Failed to load chapter prompt"))?;
-
-    let user_prompt = format!("Start teaching chapter: {chapter_title}");
-
-    let request = GatewayRequest {
-        model: state.config.llm_model.clone(),
-        messages: vec![system_msg(&system_prompt), user_msg(&user_prompt)],
-        temperature: Some(0.3),
-        max_tokens: Some(4096),
-        stream: true,
->>>>>>> 28498b0255c2f4ad7bac59cc72f6116dc1b87854
     };
 
     let ping_interval = std::time::Duration::from_secs(state.config.sse_ping_interval_secs);
 
     let stream = async_stream::stream! {
         yield Ok(Event::default()
+            .event("status")
             .id(next_sse_id())
             .data(serde_json::to_string(&SseEvent::Status {
                 state: "CHAPTER_LEARNING".to_string(),
-<<<<<<< HEAD
                 message: format!("Loading chapter: {chapter_title}"),
             }).expect("SSE event serialization failed")));
 
-        if let Some(cached) = cached_content {
+        if let Some(ref cached_content) = cached {
             yield Ok(Event::default()
+                .event("done")
                 .id(next_sse_id())
                 .data(serde_json::to_string(&SseEvent::Done {
                     result: json!({
                         "chapter_id": ch_id,
-                        "content": cached,
+                        "content": cached_content,
                     }),
                 }).expect("SSE event serialization failed")));
             return;
@@ -919,6 +913,7 @@ async fn start_chapter_stream(
             Ok(p) => p,
             Err(_) => {
                 yield Ok(Event::default()
+                    .event("error")
                     .id(next_sse_id())
                     .data(serde_json::to_string(&SseEvent::Error {
                         code: "PROMPT_ERROR".to_string(),
@@ -938,11 +933,6 @@ async fn start_chapter_stream(
             stream: true,
         };
 
-=======
-                message: format!("Generating content for chapter: {chapter_title}"),
-            }).expect("SSE event serialization failed")));
-
->>>>>>> 28498b0255c2f4ad7bac59cc72f6116dc1b87854
         let chunk_stream = state.llm.stream(request);
         tokio::pin!(chunk_stream);
         let mut full_content = String::new();
@@ -952,6 +942,7 @@ async fn start_chapter_stream(
                 Ok(chunk) => {
                     full_content.push_str(&chunk.content);
                     yield Ok(Event::default()
+                        .event("chunk")
                         .id(next_sse_id())
                         .data(serde_json::to_string(&SseEvent::Chunk {
                             content: chunk.content.clone(),
@@ -961,6 +952,7 @@ async fn start_chapter_stream(
                 }
                 Err(e) => {
                     yield Ok(Event::default()
+                        .event("error")
                         .id(next_sse_id())
                         .data(serde_json::to_string(&SseEvent::Error {
                             code: "STREAM_ERROR".to_string(),
@@ -977,14 +969,11 @@ async fn start_chapter_stream(
             s.current_chapter_id = Some(ch_id.clone());
             s.chapter_contents.insert(ch_id.clone(), full_content.clone());
             s.updated_at = chrono::Utc::now();
-<<<<<<< HEAD
             state.store.persist(s.id);
-=======
-        state.store.persist(s.id);
->>>>>>> 28498b0255c2f4ad7bac59cc72f6116dc1b87854
         }
 
         yield Ok(Event::default()
+            .event("done")
             .id(next_sse_id())
             .data(serde_json::to_string(&SseEvent::Done {
                 result: json!({
@@ -1016,11 +1005,7 @@ async fn ask_question(
         ));
     }
 
-<<<<<<< HEAD
     let (profile_json, chapter_content, conversation_history, curriculum_context) = {
-=======
-    let profile_json = {
->>>>>>> 28498b0255c2f4ad7bac59cc72f6116dc1b87854
         let handle = load_or_404(&state, id).await?;
         let s = handle.read().await;
         let current = s.state();
@@ -1029,17 +1014,12 @@ async fn ask_question(
                 "Cannot ask question in state {current}"
             )));
         }
-<<<<<<< HEAD
         let profile = s.profile.clone().unwrap_or_else(|| {
-=======
-        s.profile.clone().unwrap_or_else(|| {
->>>>>>> 28498b0255c2f4ad7bac59cc72f6116dc1b87854
             json!({
                 "experience_level": {"domain_knowledge": "beginner"},
                 "learning_style": {"preferred_format": ["text"]},
                 "available_time": {"hours_per_week": 5}
             })
-<<<<<<< HEAD
         });
 
         // Extract current chapter content for LLM context
@@ -1072,9 +1052,6 @@ async fn ask_question(
             serde_json::to_string(&history).unwrap_or_default(),
             serde_json::to_string(&curriculum).unwrap_or_default(),
         )
-=======
-        })
->>>>>>> 28498b0255c2f4ad7bac59cc72f6116dc1b87854
     };
 
     let mut vars = HashMap::new();
@@ -1082,7 +1059,6 @@ async fn ask_question(
     vars.insert(
         "user_profile".to_string(),
         serde_json::to_string(&profile_json).unwrap_or_default(),
-<<<<<<< HEAD
     );
     vars.insert("chapter".to_string(), chapter_content);
     vars.insert(
@@ -1092,8 +1068,6 @@ async fn ask_question(
     vars.insert(
         "curriculum_context".to_string(),
         curriculum_context,
-=======
->>>>>>> 28498b0255c2f4ad7bac59cc72f6116dc1b87854
     );
 
     let system_prompt = state

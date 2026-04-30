@@ -93,7 +93,7 @@ export function LearningLayout() {
             </div>
           ) : chapterContent ? (
             <>
-              {streamState.isStreaming && (
+              {streamState.isStreaming && !cachedChapter?.content && (
                 <div className="streaming-indicator">Streaming...</div>
               )}
               <MarkdownRenderer content={chapterContent} />

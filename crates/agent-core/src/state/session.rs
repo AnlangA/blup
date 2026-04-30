@@ -256,6 +256,48 @@ impl InMemorySessionStore {
         self.sessions.read().await.len()
     }
 
+    /// List lightweight metadata for all sessions.
+    pub async fn list(&self) -> Vec<SessionListEntry> {
+        let sessions = self.sessions.read().await;
+        let mut entries: Vec<SessionListEntry> = sessions
+            .iter()
+            .map(|(id, handle)| {
+                // Best-effort: try read lock, skip if contended
+                let s = handle.try_read();
+                match s {
+                    Ok(session) => SessionListEntry {
+                        id: session.id.to_string(),
+                        state: session.state().to_string(),
+                        goal_description: session
+                            .goal
+                            .as_ref()
+                            .and_then(|g| g.get("description"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Untitled")
+                            .to_string(),
+                        domain: session
+                            .goal
+                            .as_ref()
+                            .and_then(|g| g.get("domain"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        updated_at: session.updated_at.to_rfc3339(),
+                    },
+                    Err(_) => SessionListEntry {
+                        id: id.to_string(),
+                        state: "UNKNOWN".to_string(),
+                        goal_description: "Untitled".to_string(),
+                        domain: String::new(),
+                        updated_at: String::new(),
+                    },
+                }
+            })
+            .collect();
+        entries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        entries
+    }
+
     /// Start a background task that evicts sessions older than `ttl`.
     pub fn start_eviction_task(&self, ttl: Duration, interval: Duration) {
         let store = self.clone();
@@ -294,4 +336,14 @@ impl Default for InMemorySessionStore {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Lightweight session metadata for listing.
+#[derive(Debug, serde::Serialize)]
+pub struct SessionListEntry {
+    pub id: String,
+    pub state: String,
+    pub goal_description: String,
+    pub domain: String,
+    pub updated_at: String,
 }

@@ -1,10 +1,10 @@
 import { useSessionStore } from '../../state/sessionStore';
-import { useCurriculum } from '../../hooks/query';
+import { useCurriculum, useCreatePlan } from '../../hooks/query';
 
 export function CompletionScreen() {
   const sessionId = useSessionStore((s) => s.sessionId);
-  const reset = useSessionStore((s) => s.reset);
   const { data: curriculum } = useCurriculum(sessionId);
+  const createPlan = useCreatePlan();
 
   const chapterCount = curriculum?.chapters?.length ?? 0;
 
@@ -18,7 +18,12 @@ export function CompletionScreen() {
         </p>
       )}
       <div className="actions">
-        <button onClick={reset}>Start a New Learning Goal</button>
+        <button
+          onClick={() => createPlan.mutate()}
+          disabled={createPlan.isPending}
+        >
+          {createPlan.isPending ? 'Creating...' : 'Start a New Learning Goal'}
+        </button>
       </div>
     </div>
   );

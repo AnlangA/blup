@@ -1,27 +1,84 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type {
   LearningGoal,
   ProfileAnswer,
   SessionSnapshot,
+  SessionListEntry,
   CurriculumPlan,
   ChapterContent,
 } from "../api/client";
 import { useSessionStore } from "../state/sessionStore";
 
-// ── Session ──
+// ── Plans ──
 
-export function useCreateSession() {
-  const setSession = useSessionStore((s) => s.setSession);
+export function useCreatePlan() {
+  const addPlan = useSessionStore((s) => s.addPlan);
 
   return useMutation({
     mutationFn: () => api.createSession(),
     onSuccess: (data) => {
-      localStorage.setItem("blup_session_id", data.session_id);
-      setSession(data.session_id);
+      addPlan({
+        id: data.session_id,
+        title: "Untitled",
+        domain: "",
+        state: data.state,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
     },
   });
 }
+
+export function useDeletePlan() {
+  const removePlan = useSessionStore((s) => s.removePlan);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (planId: string) => api.deleteSession(planId),
+    onSuccess: (_data, planId) => {
+      queryClient.removeQueries({ queryKey: ["session", planId] });
+      queryClient.removeQueries({ queryKey: ["curriculum", planId] });
+      removePlan(planId);
+    },
+  });
+}
+
+export function useSyncPlansFromServer() {
+  const updatePlanMeta = useSessionStore((s) => s.updatePlanMeta);
+
+  return useQuery<SessionListEntry[]>({
+    queryKey: ["sessions"],
+    queryFn: async () => {
+      const entries = await api.listSessions();
+      // Read plans from store directly (not from closure) to avoid stale data
+      const currentPlans = useSessionStore.getState().plans;
+      for (const entry of entries) {
+        const existing = currentPlans.find((p) => p.id === entry.id);
+        if (existing) {
+          if (
+            existing.state !== entry.state ||
+            existing.title !== entry.goal_description ||
+            existing.domain !== entry.domain
+          ) {
+            updatePlanMeta(entry.id, {
+              state: entry.state,
+              title: entry.goal_description || existing.title,
+              domain: entry.domain || existing.domain,
+              updatedAt: entry.updated_at,
+            });
+          }
+        }
+      }
+      return entries;
+    },
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+}
+
+// ── Session ──
 
 export function useSession(sessionId: string | null) {
   return useQuery<SessionSnapshot>({
@@ -30,6 +87,39 @@ export function useSession(sessionId: string | null) {
     enabled: !!sessionId,
     staleTime: 30_000,
   });
+}
+
+/** Sync plan metadata from session data — call in a dedicated useEffect. */
+export function useSyncPlanFromSession(
+  sessionId: string | null,
+  session: SessionSnapshot | undefined,
+) {
+  const updatePlanMeta = useSessionStore((s) => s.updatePlanMeta);
+
+  useEffect(() => {
+    if (!sessionId || !session) return;
+    const goalDesc =
+      (session.goal as Record<string, unknown> | null)?.description;
+    const goalDomain =
+      (session.goal as Record<string, unknown> | null)?.domain;
+    const newTitle = (goalDesc as string) || "Untitled";
+    const newDomain = (goalDomain as string) || "";
+    const current = useSessionStore
+      .getState()
+      .plans.find((p) => p.id === sessionId);
+    if (
+      current &&
+      (current.state !== session.state ||
+        current.title !== newTitle ||
+        current.domain !== newDomain)
+    ) {
+      updatePlanMeta(sessionId, {
+        state: session.state,
+        title: newTitle,
+        domain: newDomain,
+      });
+    }
+  }, [sessionId, session, updatePlanMeta]);
 }
 
 // ── Goal ──

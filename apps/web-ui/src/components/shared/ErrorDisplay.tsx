@@ -1,9 +1,7 @@
-import { useSessionStore } from '../../state/sessionStore';
-import { useCreateSession } from '../../hooks/query';
+import { useCreatePlan } from '../../hooks/query';
 
 export function ErrorDisplay() {
-  const reset = useSessionStore((s) => s.reset);
-  const createSession = useCreateSession();
+  const createPlan = useCreatePlan();
 
   return (
     <div className="error-display" role="alert">
@@ -11,13 +9,10 @@ export function ErrorDisplay() {
       <p>An unexpected error occurred. Please try again.</p>
       <div className="error-actions">
         <button
-          onClick={() => createSession.mutate()}
-          disabled={createSession.isPending}
+          onClick={() => createPlan.mutate()}
+          disabled={createPlan.isPending}
         >
           Retry
-        </button>
-        <button className="secondary" onClick={reset}>
-          Start Over
         </button>
       </div>
     </div>

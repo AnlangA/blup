@@ -76,6 +76,14 @@ export interface ChapterProgress {
   last_accessed: string;
 }
 
+export interface SessionListEntry {
+  id: string;
+  state: string;
+  goal_description: string;
+  domain: string;
+  updated_at: string;
+}
+
 export interface SessionSnapshot {
   session_id: string;
   state: string;
@@ -197,6 +205,14 @@ export class ApiClient {
 
   async getSession(sessionId: string): Promise<SessionSnapshot> {
     return this.request("GET", `/api/session/${sessionId}`);
+  }
+
+  async listSessions(): Promise<SessionListEntry[]> {
+    return this.request("GET", "/api/sessions");
+  }
+
+  async deleteSession(sessionId: string): Promise<{ deleted: boolean }> {
+    return this.request("DELETE", `/api/session/${sessionId}`);
   }
 }
 
