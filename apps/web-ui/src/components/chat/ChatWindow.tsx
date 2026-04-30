@@ -8,6 +8,7 @@ interface ChatMessage {
   role: string;
   content: string;
   timestamp: string;
+  chapter_id?: string;
 }
 
 export function ChatWindow() {
@@ -22,7 +23,7 @@ export function ChatWindow() {
 
   // Messages come from backend session snapshot, filtered by current chapter
   const messages: ChatMessage[] = ((session?.messages ?? []) as ChatMessage[]).filter(
-    (m) => !currentChapterId || (m as unknown as Record<string, unknown>).chapter_id === currentChapterId,
+    (m) => !currentChapterId || m.chapter_id === currentChapterId,
   );
 
   useEffect(() => {

@@ -10,6 +10,8 @@ import { LearningLayout } from './components/LearningLayout';
 
 function App() {
   const sessionId = useSessionStore((s) => s.sessionId);
+  const currentChapterId = useSessionStore((s) => s.currentChapterId);
+  const setChapter = useSessionStore((s) => s.setChapter);
   const reset = useSessionStore((s) => s.reset);
   const createSession = useCreateSession();
 
@@ -27,6 +29,13 @@ function App() {
     isError: sessionError,
     error: sessionErr,
   } = useSession(sessionId);
+
+  // Restore currentChapterId from server session snapshot if client lost it
+  useEffect(() => {
+    if (session?.current_chapter_id && !currentChapterId) {
+      setChapter(session.current_chapter_id);
+    }
+  }, [session?.current_chapter_id, currentChapterId, setChapter]);
 
   // If the session query failed with NOT_FOUND (e.g. stale session after
   // backend restart), clear the stale ID and create a new session.

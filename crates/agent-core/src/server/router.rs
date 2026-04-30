@@ -815,7 +815,10 @@ async fn start_chapter_stream(
 > {
     let handle = load_or_404(&state, id).await?;
 
-    let (chapter_title, profile_json) = {
+    // Check cache first — if content already exists, return it immediately
+    // without calling the LLM. This also prevents cascading failures when
+    // the SSE connection drops and reconnects.
+    let (cached_content, chapter_title, profile_json) = {
         let s = handle.read().await;
         let current = s.state();
         if current != crate::state::types::SessionState::ChapterLearning {
@@ -823,6 +826,8 @@ async fn start_chapter_stream(
                 "Cannot start chapter in state {current}"
             )));
         }
+
+        let cached = s.chapter_contents.get(&ch_id).cloned();
 
         let title = s
             .curriculum
@@ -845,30 +850,8 @@ async fn start_chapter_stream(
                 "available_time": {"hours_per_week": 5}
             })
         });
-        (title, profile)
-    };
 
-    let mut vars = HashMap::new();
-    vars.insert("chapter_id".to_string(), ch_id.clone());
-    vars.insert(
-        "user_profile".to_string(),
-        serde_json::to_string(&profile_json).unwrap_or_default(),
-    );
-    vars.insert("curriculum_context".to_string(), "{}".to_string());
-
-    let system_prompt = state
-        .prompts
-        .load_and_render("chapter_teaching", 1, &vars)
-        .map_err(|_| internal_error("Failed to load chapter prompt"))?;
-
-    let user_prompt = format!("Start teaching chapter: {chapter_title}");
-
-    let request = GatewayRequest {
-        model: state.config.llm_model.clone(),
-        messages: vec![system_msg(&system_prompt), user_msg(&user_prompt)],
-        temperature: Some(0.3),
-        max_tokens: Some(4096),
-        stream: true,
+        (cached, title, profile)
     };
 
     let ping_interval = std::time::Duration::from_secs(state.config.sse_ping_interval_secs);
@@ -878,8 +861,51 @@ async fn start_chapter_stream(
             .id(next_sse_id())
             .data(serde_json::to_string(&SseEvent::Status {
                 state: "CHAPTER_LEARNING".to_string(),
-                message: format!("Generating content for chapter: {chapter_title}"),
+                message: format!("Loading chapter: {chapter_title}"),
             }).expect("SSE event serialization failed")));
+
+        if let Some(cached) = cached_content {
+            yield Ok(Event::default()
+                .id(next_sse_id())
+                .data(serde_json::to_string(&SseEvent::Done {
+                    result: json!({
+                        "chapter_id": ch_id,
+                        "content": cached,
+                    }),
+                }).expect("SSE event serialization failed")));
+            return;
+        }
+
+        let mut vars = HashMap::new();
+        vars.insert("chapter_id".to_string(), ch_id.clone());
+        vars.insert(
+            "user_profile".to_string(),
+            serde_json::to_string(&profile_json).unwrap_or_default(),
+        );
+        vars.insert("curriculum_context".to_string(), "{}".to_string());
+
+        let system_prompt = match state.prompts.load_and_render("chapter_teaching", 1, &vars) {
+            Ok(p) => p,
+            Err(_) => {
+                yield Ok(Event::default()
+                    .id(next_sse_id())
+                    .data(serde_json::to_string(&SseEvent::Error {
+                        code: "PROMPT_ERROR".to_string(),
+                        message: "Failed to load chapter prompt".to_string(),
+                    }).expect("SSE event serialization failed")));
+                return;
+            }
+        };
+
+        let user_prompt = format!("Start teaching chapter: {chapter_title}");
+
+        let request = GatewayRequest {
+            model: state.config.llm_model.clone(),
+            messages: vec![system_msg(&system_prompt), user_msg(&user_prompt)],
+            temperature: Some(0.3),
+            max_tokens: Some(4096),
+            stream: true,
+        };
 
         let chunk_stream = state.llm.stream(request);
         tokio::pin!(chunk_stream);
@@ -915,7 +941,7 @@ async fn start_chapter_stream(
             s.current_chapter_id = Some(ch_id.clone());
             s.chapter_contents.insert(ch_id.clone(), full_content.clone());
             s.updated_at = chrono::Utc::now();
-        state.store.persist(s.id);
+            state.store.persist(s.id);
         }
 
         yield Ok(Event::default()
@@ -950,7 +976,7 @@ async fn ask_question(
         ));
     }
 
-    let profile_json = {
+    let (profile_json, chapter_content, conversation_history, curriculum_context) = {
         let handle = load_or_404(&state, id).await?;
         let s = handle.read().await;
         let current = s.state();
@@ -959,13 +985,44 @@ async fn ask_question(
                 "Cannot ask question in state {current}"
             )));
         }
-        s.profile.clone().unwrap_or_else(|| {
+        let profile = s.profile.clone().unwrap_or_else(|| {
             json!({
                 "experience_level": {"domain_knowledge": "beginner"},
                 "learning_style": {"preferred_format": ["text"]},
                 "available_time": {"hours_per_week": 5}
             })
-        })
+        });
+
+        // Extract current chapter content for LLM context
+        let ch_content = s
+            .chapter_contents
+            .get(&_ch_id)
+            .cloned()
+            .unwrap_or_default();
+
+        // Filter messages for the current chapter as conversation history
+        let history: Vec<&serde_json::Value> = s
+            .messages
+            .iter()
+            .filter(|m| {
+                m.get("chapter_id")
+                    .and_then(|v| v.as_str())
+                    .map(|cid| cid == _ch_id)
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        let curriculum = s
+            .curriculum
+            .clone()
+            .unwrap_or(json!({"title": "Unknown", "chapters": []}));
+
+        (
+            profile,
+            ch_content,
+            serde_json::to_string(&history).unwrap_or_default(),
+            serde_json::to_string(&curriculum).unwrap_or_default(),
+        )
     };
 
     let mut vars = HashMap::new();
@@ -973,6 +1030,15 @@ async fn ask_question(
     vars.insert(
         "user_profile".to_string(),
         serde_json::to_string(&profile_json).unwrap_or_default(),
+    );
+    vars.insert("chapter".to_string(), chapter_content);
+    vars.insert(
+        "conversation_history".to_string(),
+        conversation_history,
+    );
+    vars.insert(
+        "curriculum_context".to_string(),
+        curriculum_context,
     );
 
     let system_prompt = state

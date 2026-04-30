@@ -13,6 +13,19 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
+[data-theme='github-dark'] {
+  --color-primary: #818cf8;
+  --color-primary-hover: #6366f1;
+  --color-bg: #0d1117;
+  --color-bg-secondary: #161b22;
+  --color-text: #e6edf3;
+  --color-text-secondary: #8b949e;
+  --color-border: #30363d;
+  --color-error: #f85149;
+  --color-success: #3fb950;
+  --color-warning: #d2991d;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {

@@ -91,6 +91,7 @@ export interface SessionSnapshot {
     role: string;
     content: string;
     timestamp: string;
+    chapter_id?: string;
   }>;
 }
 
