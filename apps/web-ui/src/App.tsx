@@ -1,12 +1,12 @@
-import { useEffect } from 'react';
-import { useSessionStore } from './state/sessionStore';
-import { useCreateSession, useSession } from './hooks/query';
-import { GoalInput } from './components/session/GoalInput';
-import { FeasibilityResult } from './components/session/FeasibilityResult';
-import { ProfileQuestion } from './components/session/ProfileQuestion';
-import { CompletionScreen } from './components/session/CompletionScreen';
-import { ErrorDisplay } from './components/shared/ErrorDisplay';
-import { LearningLayout } from './components/LearningLayout';
+import { useEffect } from "react";
+import { useSessionStore } from "./state/sessionStore";
+import { useCreateSession, useSession } from "./hooks/query";
+import { GoalInput } from "./components/session/GoalInput";
+import { FeasibilityResult } from "./components/session/FeasibilityResult";
+import { ProfileQuestion } from "./components/session/ProfileQuestion";
+import { CompletionScreen } from "./components/session/CompletionScreen";
+import { ErrorDisplay } from "./components/shared/ErrorDisplay";
+import { LearningLayout } from "./components/LearningLayout";
 
 function App() {
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -41,7 +41,7 @@ function App() {
   // backend restart), clear the stale ID and create a new session.
   useEffect(() => {
     const code = (sessionErr as { code?: string } | null)?.code;
-    if (sessionError && code === 'NOT_FOUND') {
+    if (sessionError && code === "NOT_FOUND") {
       reset();
       createSession.mutate();
     }
@@ -49,32 +49,32 @@ function App() {
   }, [sessionError]);
 
   // Derive state from backend
-  const state = session?.state ?? 'IDLE';
+  const state = session?.state ?? "IDLE";
 
   if (createSession.isPending) {
     return <div className="loading-screen">Initializing...</div>;
   }
 
-  if (createSession.isError || state === 'ERROR') {
+  if (createSession.isError || state === "ERROR") {
     return <ErrorDisplay />;
   }
 
   switch (state) {
-    case 'IDLE':
-    case 'GOAL_INPUT':
+    case "IDLE":
+    case "GOAL_INPUT":
       return <GoalInput />;
-    case 'FEASIBILITY_CHECK':
-    case 'PROFILE_COLLECTION':
+    case "FEASIBILITY_CHECK":
+    case "PROFILE_COLLECTION":
       return (
         <>
           <FeasibilityResult />
-          {state === 'PROFILE_COLLECTION' && <ProfileQuestion />}
+          {state === "PROFILE_COLLECTION" && <ProfileQuestion />}
         </>
       );
-    case 'CURRICULUM_PLANNING':
-    case 'CHAPTER_LEARNING':
+    case "CURRICULUM_PLANNING":
+    case "CHAPTER_LEARNING":
       return <LearningLayout />;
-    case 'COMPLETED':
+    case "COMPLETED":
       return <CompletionScreen />;
     default:
       return <GoalInput />;

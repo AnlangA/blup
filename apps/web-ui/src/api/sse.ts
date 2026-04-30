@@ -57,22 +57,25 @@ export class SSEClient {
       this.close();
     });
 
-    es.addEventListener('error', (e: MessageEvent) => {
-      try {
-        const d = JSON.parse(e.data);
-        handlers.onError?.(d.code, d.message);
-      } catch {
-        this.handleReconnect(url, handlers);
+    es.addEventListener('error', (e: Event) => {
+      const msgEvent = e as MessageEvent;
+      // Named SSE "error" event from the server (has data payload)
+      if (msgEvent.data) {
+        try {
+          const d = JSON.parse(msgEvent.data);
+          handlers.onError?.(d.code, d.message);
+          return;
+        } catch {
+          // Malformed data — fall through to reconnect
+        }
       }
+      // Connection-level error (server closed stream, network issue, etc.)
+      this.handleReconnect(url, handlers);
     });
 
     es.addEventListener('ping', () => {
       handlers.onPing?.();
     });
-
-    es.onerror = () => {
-      this.handleReconnect(url, handlers);
-    };
   }
 
   private handleReconnect(url: string, handlers: SSEHandlers): void {

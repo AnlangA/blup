@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { MarkdownRenderer } from '../content/MarkdownRenderer';
-import { useSessionStore } from '../../state/sessionStore';
-import { useSession, useAskQuestion } from '../../hooks/query';
+import { useState, useRef, useEffect, useCallback } from "react";
+import { MarkdownRenderer } from "../content/MarkdownRenderer";
+import { useSessionStore } from "../../state/sessionStore";
+import { useSession, useAskQuestion } from "../../hooks/query";
 
 interface ChatMessage {
   id: string;
@@ -17,36 +17,36 @@ export function ChatWindow() {
   const { data: session } = useSession(sessionId);
   const askQuestion = useAskQuestion(sessionId, currentChapterId);
 
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Messages come from backend session snapshot, filtered by current chapter
-  const messages: ChatMessage[] = ((session?.messages ?? []) as ChatMessage[]).filter(
-    (m) => !currentChapterId || m.chapter_id === currentChapterId,
-  );
+  const messages: ChatMessage[] = (
+    (session?.messages ?? []) as ChatMessage[]
+  ).filter((m) => !currentChapterId || m.chapter_id === currentChapterId);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   // Auto-resize textarea
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
-    ta.style.height = 'auto';
+    ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
   }, [input]);
 
   const handleSend = useCallback(() => {
     if (!sessionId || !currentChapterId || !input.trim()) return;
     askQuestion.mutate(input.trim());
-    setInput('');
+    setInput("");
   }, [sessionId, currentChapterId, input, askQuestion]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
@@ -60,7 +60,7 @@ export function ChatWindow() {
         {messages.map((msg) => (
           <div key={msg.id} className={`message ${msg.role}`}>
             <div className="message-avatar">
-              {msg.role === 'user' ? '👤' : '🤖'}
+              {msg.role === "user" ? "👤" : "🤖"}
             </div>
             <div className="message-body">
               <MarkdownRenderer content={msg.content} />
@@ -92,10 +92,7 @@ export function ChatWindow() {
           disabled={askQuestion.isPending}
           aria-label="Question input"
         />
-        <button
-          type="submit"
-          disabled={askQuestion.isPending || !input.trim()}
-        >
+        <button type="submit" disabled={askQuestion.isPending || !input.trim()}>
           Send
         </button>
       </form>

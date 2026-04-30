@@ -1,10 +1,10 @@
-import { useState, useRef, useCallback } from 'react';
-import { useSessionStore } from '../state/sessionStore';
-import { useChapter } from '../hooks/query';
-import { useStreamChapter } from '../hooks/streaming';
-import { CurriculumSidebar } from './curriculum/CurriculumSidebar';
-import { ChatWindow } from './chat/ChatWindow';
-import { MarkdownRenderer } from './content/MarkdownRenderer';
+import { useState, useRef, useCallback } from "react";
+import { useSessionStore } from "../state/sessionStore";
+import { useChapter } from "../hooks/query";
+import { useStreamChapter } from "../hooks/streaming";
+import { CurriculumSidebar } from "./curriculum/CurriculumSidebar";
+import { ChatWindow } from "./chat/ChatWindow";
+import { MarkdownRenderer } from "./content/MarkdownRenderer";
 
 const SIDEBAR_DEFAULT = 260;
 const SIDEBAR_MIN = 180;
@@ -25,17 +25,16 @@ export function LearningLayout() {
   const streamState = useStreamChapter(sessionId, currentChapterId);
 
   // Prefer streamed content, fall back to cached
-  const chapterContent =
-    streamState.content ?? cachedChapter?.content ?? null;
+  const chapterContent = streamState.content ?? cachedChapter?.content ?? null;
   const isLoading =
     (cacheLoading || streamState.isStreaming) && !chapterContent;
 
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const [chatWidth, setChatWidth] = useState(CHAT_DEFAULT);
-  const dragging = useRef<'sidebar' | 'chat' | null>(null);
+  const dragging = useRef<"sidebar" | "chat" | null>(null);
 
   const onResizeStart = useCallback(
-    (panel: 'sidebar' | 'chat') => (e: React.MouseEvent) => {
+    (panel: "sidebar" | "chat") => (e: React.MouseEvent) => {
       e.preventDefault();
       dragging.current = panel;
       let lastX = e.clientX;
@@ -44,7 +43,7 @@ export function LearningLayout() {
         const delta = ev.clientX - lastX;
         lastX = ev.clientX;
 
-        if (dragging.current === 'sidebar') {
+        if (dragging.current === "sidebar") {
           setSidebarWidth((w) =>
             Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w + delta)),
           );
@@ -57,16 +56,16 @@ export function LearningLayout() {
 
       const onUp = () => {
         dragging.current = null;
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        document.body.style.userSelect = '';
-        document.body.style.cursor = '';
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
       };
 
-      document.body.style.userSelect = 'none';
-      document.body.style.cursor = 'col-resize';
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
     },
     [],
   );
@@ -79,10 +78,7 @@ export function LearningLayout() {
       }}
     >
       <CurriculumSidebar />
-      <div
-        className="resize-handle"
-        onMouseDown={onResizeStart('sidebar')}
-      />
+      <div className="resize-handle" onMouseDown={onResizeStart("sidebar")} />
       <main className="chapter-content">
         {currentChapterId ? (
           isLoading ? (
@@ -91,13 +87,13 @@ export function LearningLayout() {
             </div>
           ) : streamState.error ? (
             <div className="welcome-content">
-              <p style={{ color: 'var(--color-error)' }}>
+              <p style={{ color: "var(--color-error)" }}>
                 Failed to load chapter: {streamState.error}
               </p>
             </div>
           ) : chapterContent ? (
             <>
-              {streamState.isStreaming && !chapterContent && (
+              {streamState.isStreaming && (
                 <div className="streaming-indicator">Streaming...</div>
               )}
               <MarkdownRenderer content={chapterContent} />
@@ -114,7 +110,7 @@ export function LearningLayout() {
           </div>
         )}
       </main>
-      <div className="resize-handle" onMouseDown={onResizeStart('chat')} />
+      <div className="resize-handle" onMouseDown={onResizeStart("chat")} />
       <ChatWindow />
     </div>
   );

@@ -126,11 +126,9 @@ export class ApiClient {
     }
 
     if (!res.ok) {
-      const error = await res
-        .json()
-        .catch(() => ({
-          error: { code: "UNKNOWN", message: "Request failed" },
-        }));
+      const error = await res.json().catch(() => ({
+        error: { code: "UNKNOWN", message: "Request failed" },
+      }));
       throw (
         error.error || { code: "HTTP_ERROR", message: `HTTP ${res.status}` }
       );

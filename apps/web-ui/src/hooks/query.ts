@@ -1,13 +1,13 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "../api/client";
 import type {
   LearningGoal,
   ProfileAnswer,
   SessionSnapshot,
   CurriculumPlan,
   ChapterContent,
-} from '../api/client';
-import { useSessionStore } from '../state/sessionStore';
+} from "../api/client";
+import { useSessionStore } from "../state/sessionStore";
 
 // ── Session ──
 
@@ -17,7 +17,7 @@ export function useCreateSession() {
   return useMutation({
     mutationFn: () => api.createSession(),
     onSuccess: (data) => {
-      localStorage.setItem('blup_session_id', data.session_id);
+      localStorage.setItem("blup_session_id", data.session_id);
       setSession(data.session_id);
     },
   });
@@ -25,7 +25,7 @@ export function useCreateSession() {
 
 export function useSession(sessionId: string | null) {
   return useQuery<SessionSnapshot>({
-    queryKey: ['session', sessionId],
+    queryKey: ["session", sessionId],
     queryFn: () => api.getSession(sessionId!),
     enabled: !!sessionId,
     staleTime: 30_000,
@@ -40,7 +40,7 @@ export function useSubmitGoal(sessionId: string | null) {
   return useMutation({
     mutationFn: (goal: LearningGoal) => api.submitGoal(sessionId!, goal),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
     },
   });
 }
@@ -54,7 +54,7 @@ export function useSubmitProfile(sessionId: string | null) {
     mutationFn: (answer: ProfileAnswer) =>
       api.submitProfileAnswer(sessionId!, answer),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
     },
   });
 }
@@ -63,7 +63,7 @@ export function useSubmitProfile(sessionId: string | null) {
 
 export function useCurriculum(sessionId: string | null) {
   return useQuery<CurriculumPlan>({
-    queryKey: ['curriculum', sessionId],
+    queryKey: ["curriculum", sessionId],
     queryFn: () => api.getCurriculum(sessionId!),
     enabled: !!sessionId,
     staleTime: Infinity,
@@ -72,12 +72,9 @@ export function useCurriculum(sessionId: string | null) {
 
 // ── Chapter ──
 
-export function useChapter(
-  sessionId: string | null,
-  chapterId: string | null,
-) {
+export function useChapter(sessionId: string | null, chapterId: string | null) {
   return useQuery<ChapterContent>({
-    queryKey: ['chapter', sessionId, chapterId],
+    queryKey: ["chapter", sessionId, chapterId],
     queryFn: () => api.startChapter(sessionId!, chapterId!),
     enabled: !!sessionId && !!chapterId,
     staleTime: Infinity,
@@ -94,7 +91,7 @@ export function usePrefetchChapters(
     prefetchAll: () => {
       for (const chId of chapterIds) {
         queryClient.prefetchQuery({
-          queryKey: ['chapter', sessionId, chId],
+          queryKey: ["chapter", sessionId, chId],
           queryFn: () => api.startChapter(sessionId!, chId),
           staleTime: Infinity,
         });
@@ -116,17 +113,20 @@ export function useAskQuestion(
       api.askQuestion(sessionId!, chapterId!, question),
     onMutate: async (question) => {
       // Optimistically add the user message to the cached session
-      await queryClient.cancelQueries({ queryKey: ['session', sessionId] });
-      const previous = queryClient.getQueryData<SessionSnapshot>(['session', sessionId]);
+      await queryClient.cancelQueries({ queryKey: ["session", sessionId] });
+      const previous = queryClient.getQueryData<SessionSnapshot>([
+        "session",
+        sessionId,
+      ]);
       if (previous) {
         const optimisticMessage = {
           id: `optimistic-${Date.now()}`,
-          role: 'user',
+          role: "user",
           content: question,
           timestamp: new Date().toISOString(),
           chapter_id: chapterId ?? undefined,
         };
-        queryClient.setQueryData<SessionSnapshot>(['session', sessionId], {
+        queryClient.setQueryData<SessionSnapshot>(["session", sessionId], {
           ...previous,
           messages: [...previous.messages, optimisticMessage],
         });
@@ -136,11 +136,11 @@ export function useAskQuestion(
     onError: (_err, _question, context) => {
       // Roll back to the previous state on error
       if (context?.previous) {
-        queryClient.setQueryData(['session', sessionId], context.previous);
+        queryClient.setQueryData(["session", sessionId], context.previous);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
     },
   });
 }
@@ -154,7 +154,7 @@ export function useCompleteChapter(sessionId: string | null) {
     mutationFn: (chapterId: string) =>
       api.completeChapter(sessionId!, chapterId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
     },
   });
 }
