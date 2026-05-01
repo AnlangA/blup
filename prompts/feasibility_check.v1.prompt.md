@@ -1,77 +1,115 @@
-# Feasibility Check v1
+<task>
+Evaluate whether a learning goal is feasible to teach on this platform.
+</task>
 
-## Purpose
-Evaluate whether a learning goal is feasible to teach given the platform's capabilities.
+<input>
+- **learning_goal**: `{{learning_goal}}`
+- **domain**: `{{domain}}`
+- **context**: `{{context}}`
+</input>
 
-## Input Variables
-| Variable | Type | Required | Description |
-|----------|------|----------|-------------|
-| `learning_goal` | string | yes | The learner's stated goal |
-| `domain` | string | yes | The subject domain |
-| `context` | string | no | Additional background from the learner |
+<instructions>
+Think through this evaluation step by step:
 
-## Output Format
-Must produce valid JSON conforming to `schemas/feasibility_result.v1.schema.json`.
+**Step 1 — Scope Assessment**
+Is the goal well-defined? Evaluate whether it is:
+- **Too broad**: e.g., "learn physics", "learn programming", "study math". These need narrowing to a specific sub-domain or project.
+- **Too narrow**: e.g., "derive equation 3.7 from chapter 4", "what is the syntax for one operator". These do not warrant a full curriculum.
+- **Well-scoped**: Covers a specific skill or knowledge area that can be decomposed into 3–20 learning chapters.
 
-## Safety and Privacy Rules
-- Never fabricate computation results, citations, or execution output.
-- Never include API keys, credentials, or private paths in output.
-- Mark uncertainty explicitly: use "I'm not certain, but..." phrasing.
-- Do not reference internal system architecture to the learner.
+**Step 2 — Teachability Check**
+Can this goal be taught effectively through:
+- Structured text explanations?
+- Code examples and exercises?
+- Step-by-step problem solving?
+If the goal requires physical practice, hands-on lab work, or in-person supervision, it is partially or fully infeasible for this platform.
 
-## Handling Uncertainty
-- If the goal is ambiguous, ask clarifying questions rather than guessing.
-- If domain knowledge is insufficient, state limitations and suggest alternatives.
+**Step 3 — Depth & Duration Estimation**
+- Can the goal be broken into chapters, each completable in 15–60 minutes?
+- Is the estimated total duration realistic? (A complex domain should take weeks, not "1 day".)
+- Are the prerequisites concrete and specific? ("basic algebra" is good; "some math" is not.)
 
-## Instructions
+**Step 4 — Constructive Guidance**
+If the goal is infeasible, you MUST provide specific, actionable suggestions for refining it. Never simply reject — always guide the learner toward a feasible version they would find valuable.
+</instructions>
 
-You act as an experienced curriculum designer. Evaluate whether the goal is:
+<output_format>
+Return a single JSON object with this exact structure (no markdown fences, no extra text):
 
-1. **Well-scoped**: Not too broad ("learn physics") or too narrow ("derive one specific equation").
-2. **Teachable through dialogue**: The platform teaches via structured text, code examples, and exercises — not hands-on lab work or physical practice.
-3. **Appropriate depth**: Can be broken into reasonable chapters (3-20 chapters).
+```json
+{
+  "feasible": true | false,
+  "reason": "string — clear explanation understandable to the learner",
+  "suggestions": ["string — specific, actionable refinements (empty array if feasible)"],
+  "estimated_duration": "string — e.g., '3-4 weeks (5 hrs/week)' or 'N/A — refine goal first'",
+  "prerequisites": ["string — specific prerequisites (empty array if none)"]
+}
+```
 
-If infeasible, the response must include specific, actionable suggestions for narrowing or adjusting the goal. Never simply reject a goal — always guide the learner toward a feasible version.
+Schema reference: `schemas/feasibility_result.v1.schema.json`
+</output_format>
 
-### Constraints
-- Estimated duration must be realistic (not "1 day" for a complex topic).
-- Prerequisites should be specific, not generic ("basic algebra" is fine; "some math" is not).
-- The reason must be understandable to the learner, not an internal diagnostic.
+<constraints>
+- The `reason` field must be written for the learner, not as an internal diagnostic.
+- `estimated_duration` must be realistic for the goal's complexity.
+- Each `suggestion` must be a concrete action the learner can take, not vague advice.
+- `prerequisites` must use specific skill names, not generic phrases.
+- If the goal is ambiguous, include clarifying questions in `suggestions`.
+</constraints>
 
-## Examples
+<examples>
 
-### Example 1: Well-Scoped Goal
-**Input:**
-- Goal: "I want to learn Python for data analysis with pandas"
-- Domain: programming
-- Context: "I work with Excel spreadsheets daily"
+### Positive Example: Well-scoped goal
+
+**Input:** learning_goal="I want to learn Python for data analysis with pandas", domain="programming", context="I work with Excel spreadsheets daily"
 
 **Output:**
 ```json
 {
   "feasible": true,
-  "reason": "Python data analysis with pandas is a well-scoped goal. The learner has relevant context (Excel) which provides a practical bridge.",
+  "reason": "Python data analysis with pandas is a well-scoped goal with clear learning milestones. Your Excel experience provides a practical bridge for understanding tabular data operations.",
   "suggestions": [],
-  "estimated_duration": "4-6 weeks",
-  "prerequisites": ["basic computer literacy", "understanding of tabular data"]
+  "estimated_duration": "4-6 weeks (5 hrs/week)",
+  "prerequisites": ["basic computer literacy", "understanding of tabular data (rows, columns, cells)"]
 }
 ```
 
-### Example 2: Too Broad
-**Input:**
-- Goal: "I want to learn programming"
-- Domain: programming
+### Negative Example: Too broad
+
+**Input:** learning_goal="I want to learn programming", domain="programming", context=""
 
 **Output:**
 ```json
 {
   "feasible": false,
-  "reason": "\"Learn programming\" is too broad. There are dozens of programming languages and paradigms.",
+  "reason": "\"Learn programming\" spans dozens of languages, paradigms, and application domains — too broad for a focused curriculum.",
   "suggestions": [
-    "Choose a specific language (Python is recommended for beginners)",
-    "Pick a project type (web development, data analysis, automation)",
-    "Example: \"Learn Python to build simple web applications\""
+    "Pick a specific language: Python (recommended for beginners), JavaScript (for web), or SQL (for data)",
+    "Choose an application: web development, data analysis, automation, or game development",
+    "Example refined goal: \"Learn Python to automate repetitive spreadsheet tasks\""
   ],
-  "estimated_duration": "N/A — refine goal first"
+  "estimated_duration": "N/A — refine goal first",
+  "prerequisites": []
 }
 ```
+
+### Edge Case Example: Partially feasible
+
+**Input:** learning_goal="I want to learn to play the piano", domain="music", context=""
+
+**Output:**
+```json
+{
+  "feasible": false,
+  "reason": "Playing piano requires physical practice and real-time feedback on hand position and technique that this platform cannot provide.",
+  "suggestions": [
+    "Focus on music theory: \"Learn music theory fundamentals for keyboard instruments\"",
+    "Focus on reading music: \"Learn to read sheet music and understand rhythm notation\"",
+    "Combine with external practice: use this platform for theory and a local teacher for physical technique"
+  ],
+  "estimated_duration": "N/A — goal requires physical practice",
+  "prerequisites": []
+}
+```
+
+</examples>

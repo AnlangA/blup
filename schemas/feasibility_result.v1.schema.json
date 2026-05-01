@@ -4,7 +4,10 @@
   "title": "FeasibilityResult",
   "type": "object",
   "version": "1.0.0",
-  "required": ["feasible", "reason"],
+  "required": [
+    "feasible",
+    "reason"
+  ],
   "properties": {
     "feasible": {
       "type": "boolean",
@@ -17,7 +20,10 @@
     },
     "suggestions": {
       "type": "array",
-      "items": { "type": "string", "maxLength": 500 },
+      "items": {
+        "type": "string",
+        "maxLength": 500
+      },
       "maxItems": 5,
       "description": "Suggestions for adjusting an infeasible goal"
     },
@@ -28,9 +34,13 @@
     },
     "prerequisites": {
       "type": "array",
-      "items": { "type": "string", "maxLength": 300 },
+      "items": {
+        "type": "string",
+        "maxLength": 300
+      },
       "maxItems": 10,
       "description": "Recommended prerequisites"
     }
-  }
+  },
+  "additionalProperties": false
 }

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useSessionStore } from '../../state/sessionStore';
-import { useSubmitGoal } from '../../hooks/query';
+import { useSubmitGoalStream } from '../../hooks/query';
 
 export function GoalInput() {
   const sessionId = useSessionStore((s) => s.sessionId);
-  const submitGoal = useSubmitGoal(sessionId);
+  const { submit, reset, isStreaming, message, error } =
+    useSubmitGoalStream(sessionId);
   const [description, setDescription] = useState('');
   const [domain, setDomain] = useState('');
   const [context, setContext] = useState('');
@@ -12,14 +13,16 @@ export function GoalInput() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!description || !domain) return;
-    submitGoal.mutate({
+    submit({
       description,
       domain,
       context: context || undefined,
     });
   };
 
-  const loading = submitGoal.isPending;
+  const handleRetry = () => {
+    reset();
+  };
 
   return (
     <div className="goal-input-container">
@@ -34,6 +37,7 @@ export function GoalInput() {
             placeholder="e.g., I want to learn Python for data analysis"
             required
             minLength={10}
+            disabled={isStreaming}
           />
         </div>
         <div className="form-group">
@@ -45,6 +49,7 @@ export function GoalInput() {
             onChange={(e) => setDomain(e.target.value)}
             placeholder="e.g., programming, mathematics, physics"
             required
+            disabled={isStreaming}
           />
         </div>
         <div className="form-group">
@@ -54,15 +59,28 @@ export function GoalInput() {
             value={context}
             onChange={(e) => setContext(e.target.value)}
             placeholder="Any background about why you want to learn this"
+            disabled={isStreaming}
           />
         </div>
-        {submitGoal.isError && (
-          <p className="error-text">
-            {submitGoal.error?.message || 'Failed to submit goal'}
-          </p>
+        {isStreaming && (
+          <div className="goal-stream-status">
+            <div className="spinner" />
+            <span>{message || 'Checking feasibility...'}</span>
+          </div>
         )}
-        <button type="submit" disabled={loading || !description || !domain}>
-          {loading ? 'Checking...' : 'Start Learning'}
+        {error && (
+          <div className="goal-stream-error">
+            <p className="error-text">{error}</p>
+            <button type="button" className="retry-btn" onClick={handleRetry}>
+              Try Again
+            </button>
+          </div>
+        )}
+        <button
+          type="submit"
+          disabled={isStreaming || !description || !domain}
+        >
+          {isStreaming ? 'Checking...' : 'Start Learning'}
         </button>
       </form>
     </div>

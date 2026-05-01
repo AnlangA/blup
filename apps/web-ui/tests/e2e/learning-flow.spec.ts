@@ -43,7 +43,7 @@ test.describe('Learning Flow', () => {
     await page.waitForTimeout(3000);
 
     const sessionId = await page.evaluate(() =>
-      localStorage.getItem('blup_session_id'),
+      localStorage.getItem('blup_active_plan_id'),
     );
     expect(sessionId).toBeTruthy();
     expect(sessionId).toMatch(

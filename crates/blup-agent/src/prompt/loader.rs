@@ -13,10 +13,6 @@ pub enum PromptError {
 }
 
 /// Loads and renders versioned prompt templates with shared partials.
-///
-/// Shared partials in `shared/` (persona, safety rules, output format) are
-/// loaded once and automatically prepended to every rendered prompt.
-/// Templates are cached in memory after first load.
 pub struct PromptLoader {
     templates_dir: PathBuf,
     shared_partials: Vec<String>,
@@ -73,7 +69,6 @@ impl PromptLoader {
         partials
     }
 
-    /// Load a prompt template by name and version, with caching.
     fn load_inner(&self, name: &str, version: u32) -> Result<String, PromptError> {
         let cache_key = format!("{}.v{}", name, version);
 
@@ -109,9 +104,6 @@ impl PromptLoader {
     }
 
     /// Load a prompt and render it with variable substitution.
-    ///
-    /// Combines shared partials + the prompt template, then substitutes
-    /// `{{variable_name}}` placeholders with provided values.
     pub fn load_and_render(
         &self,
         name: &str,
@@ -124,13 +116,10 @@ impl PromptLoader {
         for partial in &self.shared_partials {
             parts.push(partial.as_str());
         }
-
         parts.push(&template);
 
         let combined = parts.join("\n\n---\n\n");
-        let rendered = Self::render_template(&combined, vars);
-
-        Ok(rendered)
+        Ok(Self::render_template(&combined, vars))
     }
 
     /// Render variables into a template string.
@@ -148,14 +137,13 @@ impl PromptLoader {
         result
     }
 
-    /// Reload shared partials and clear cache (useful during development).
+    /// Reload shared partials and clear cache.
     pub fn reload_partials(&mut self) {
         self.shared_partials = Self::load_shared_partials(&self.templates_dir);
         self.cache.write().expect("RwLock poisoned").clear();
     }
 }
 
-/// Minimal HTML-escaping for user-provided values inserted into prompts.
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")

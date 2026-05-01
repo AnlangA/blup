@@ -348,6 +348,58 @@ button.secondary {
 }
 
 /* ---- Error ---- */
+.error-text {
+  color: var(--color-error);
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 6px;
+  border: 1px solid var(--color-error);
+}
+
+/* ---- Goal Stream Status ---- */
+.goal-stream-status {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin-top: 0.5rem;
+  background: var(--color-bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+}
+.goal-stream-status .spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.goal-stream-error {
+  margin-top: 0.5rem;
+}
+.goal-stream-error .retry-btn {
+  margin-top: 0.5rem;
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.goal-stream-error .retry-btn:hover {
+  background: var(--color-bg-secondary);
+}
+
 .error-display {
   max-width: 400px;
   margin: 80px auto;

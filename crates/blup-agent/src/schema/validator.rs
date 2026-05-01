@@ -71,7 +71,6 @@ impl SchemaValidator {
     }
 
     /// Validate a JSON value against a named schema.
-    /// Returns `Ok(())` if valid, `Err(ValidationError)` if not.
     pub fn validate(
         &self,
         data: &serde_json::Value,

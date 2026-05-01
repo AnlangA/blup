@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useReducer, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { sseClient } from "../api/sse";
 import type {
   LearningGoal,
   ProfileAnswer,
@@ -89,8 +90,8 @@ export function useSession(sessionId: string | null) {
   });
 }
 
-/** Sync plan metadata from session data — call in a dedicated useEffect. */
-export function useSyncPlanFromSession(
+/** Sync plan metadata from session data whenever session query updates. */
+export function useSessionPlanSync(
   sessionId: string | null,
   session: SessionSnapshot | undefined,
 ) {
@@ -133,6 +134,91 @@ export function useSubmitGoal(sessionId: string | null) {
       queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
     },
   });
+}
+
+interface GoalStreamState {
+  status: string | null;
+  message: string | null;
+  isStreaming: boolean;
+  error: string | null;
+  result: unknown | null;
+}
+
+type GoalStreamAction =
+  | { type: "reset" }
+  | { type: "status"; state: string; message: string }
+  | { type: "done"; result: unknown }
+  | { type: "error"; message: string };
+
+function goalStreamReducer(
+  state: GoalStreamState,
+  action: GoalStreamAction,
+): GoalStreamState {
+  switch (action.type) {
+    case "reset":
+      return {
+        status: null,
+        message: null,
+        isStreaming: true,
+        error: null,
+        result: null,
+      };
+    case "status":
+      return { ...state, status: action.state, message: action.message };
+    case "done":
+      return { ...state, isStreaming: false, result: action.result };
+    case "error":
+      return { ...state, isStreaming: false, error: action.message };
+  }
+}
+
+export function useSubmitGoalStream(sessionId: string | null) {
+  const queryClient = useQueryClient();
+  const [state, dispatch] = useReducer(goalStreamReducer, {
+    status: null,
+    message: null,
+    isStreaming: false,
+    error: null,
+    result: null,
+  });
+  const sseRef = useRef(sseClient);
+
+  const submit = useCallback(
+    (goal: LearningGoal) => {
+      if (!sessionId) return;
+
+      sseRef.current.close();
+      dispatch({ type: "reset" });
+
+      const url = `/api/session/${sessionId}/goal/stream`;
+      sseRef.current.connectPost(url, goal, {
+        onStatus: (st, msg) => dispatch({ type: "status", state: st, message: msg }),
+        onDone: (result) => {
+          dispatch({ type: "done", result });
+          queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+        },
+        onError: (_code, message) => {
+          dispatch({ type: "error", message });
+          queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+        },
+      });
+    },
+    [sessionId, queryClient],
+  );
+
+  const reset = useCallback(() => {
+    sseRef.current.close();
+    dispatch({ type: "reset" });
+  }, []);
+
+  useEffect(() => {
+    const client = sseRef.current;
+    return () => {
+      client.close();
+    };
+  }, []);
+
+  return { ...state, submit, reset };
 }
 
 // ── Profile ──

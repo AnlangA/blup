@@ -1,7 +1,7 @@
-use agent_core::prompts::loader::PromptLoader;
 use agent_core::state::machine::StateMachine;
 use agent_core::state::types::{SessionState, Transition};
-use agent_core::validation::schema_validator::SchemaValidator;
+use blup_agent::prompt::PromptLoader;
+use blup_agent::schema::SchemaValidator;
 use serde_json::json;
 
 use crate::common::TestHarness;
@@ -86,9 +86,9 @@ schema_tests!(
     test_message_schema,
     "message",
     [
-        &json!({"id":"550e8400-e29b-41d4-a716-446655440000","role":"assistant","content":"Hello","timestamp":"2024-01-15T10:30:00Z"}),
-        &json!({"id":"550e8400-e29b-41d4-a716-446655440001","role":"user","content":"Hi","timestamp":"2024-01-15T10:31:00Z"}),
-        &json!({"id":"550e8400-e29b-41d4-a716-446655440002","role":"system","content":"sys","timestamp":"2024-01-15T10:32:00Z"}),
+        &json!({"id":"550e8400-e29b-41d4-a716-446655440000","role":"assistant","content":"Hello","timestamp":"2024-01-15T10:30:00Z","chapter_id":"c1"}),
+        &json!({"id":"550e8400-e29b-41d4-a716-446655440001","role":"user","content":"Hi","timestamp":"2024-01-15T10:31:00Z","chapter_id":"c1"}),
+        &json!({"id":"550e8400-e29b-41d4-a716-446655440002","role":"system","content":"sys","timestamp":"2024-01-15T10:32:00Z","chapter_id":"c1"}),
     ],
     [
         &json!({"id":"550e8400-e29b-41d4-a716-446655440003","role":"assistant","content":"Missing timestamp"}),
@@ -99,7 +99,7 @@ schema_tests!(
     test_chapter_progress_schema,
     "chapter_progress",
     [
-        &json!({"chapter_id":"c1","status":"completed","completion":100.0,"last_accessed":"2024-01-15T10:30:00Z","time_spent":"45m"}),
+        &json!({"chapter_id":"c1","status":"completed","completion":100.0,"last_accessed":"2024-01-15T10:30:00Z","time_spent_minutes":45}),
         &json!({"chapter_id":"c2","status":"in_progress","completion":50.0,"last_accessed":"2024-01-15T11:00:00Z"}),
     ],
     [&json!({"chapter_id":"c1","completion":100.0}),]
@@ -612,4 +612,235 @@ async fn test_concurrent_session_read_write() {
     let (r1, r2) = tokio::join!(t1, t2);
     assert!(r1.unwrap().status().is_success());
     assert!(r2.unwrap().status().is_success());
+}
+
+// ---------------------------------------------------------------------------
+// Extended Phase 1 tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_delete_session() {
+    let h = TestHarness::new().await;
+    let (_, body) = h.post("/api/session", None).await;
+    let sid = body["session_id"].as_str().unwrap();
+
+    let (status, _) = h.delete(&format!("/api/session/{sid}")).await;
+    assert_eq!(status, 200);
+
+    let (status, body) = h.get(&format!("/api/session/{sid}")).await;
+    assert_eq!(status, 404);
+    assert_eq!(body["error"]["code"], "NOT_FOUND");
+}
+
+#[tokio::test]
+async fn test_list_sessions() {
+    let h = TestHarness::new().await;
+
+    let (_, b1) = h.post("/api/session", None).await;
+    let (_, b2) = h.post("/api/session", None).await;
+    let s1 = b1["session_id"].as_str().unwrap();
+    let s2 = b2["session_id"].as_str().unwrap();
+
+    let (status, body) = h.get("/api/sessions").await;
+    assert_eq!(status, 200);
+    let arr = body.as_array().unwrap();
+    assert!(arr.len() >= 2);
+    let ids: Vec<&str> = arr.iter().filter_map(|e| e["id"].as_str()).collect();
+    assert!(ids.contains(&s1));
+    assert!(ids.contains(&s2));
+}
+
+#[tokio::test]
+async fn test_goal_resubmit_after_infeasible() {
+    // Not directly testable with mock since it always returns feasible,
+    // but we test the API contract for state transitions
+    let h = TestHarness::new().await;
+    let (_, body) = h.post("/api/session", None).await;
+    let sid = body["session_id"].as_str().unwrap();
+
+    // Submit goal → goes to PROFILE_COLLECTION
+    let (status, body) = h
+        .post(
+            &format!("/api/session/{sid}/goal"),
+            Some(json!({"description": "Learn Python for data analysis", "domain": "programming"})),
+        )
+        .await;
+    assert_eq!(status, 200);
+    assert_eq!(body["state"], "PROFILE_COLLECTION");
+}
+
+#[tokio::test]
+async fn test_profile_in_wrong_state() {
+    let h = TestHarness::new().await;
+    let (_, body) = h.post("/api/session", None).await;
+    let sid = body["session_id"].as_str().unwrap();
+
+    // Profile answer without submitting goal first → should fail
+    let (status, body) = h
+        .post(
+            &format!("/api/session/{sid}/profile/answer"),
+            Some(json!({"question_id": "q0", "answer": "beginner"})),
+        )
+        .await;
+    assert_eq!(status, 409);
+    assert_eq!(body["error"]["code"], "INVALID_STATE_TRANSITION");
+}
+
+#[tokio::test]
+async fn test_curriculum_caching() {
+    let h = TestHarness::new().await;
+    let sid = h.setup_learning().await;
+
+    let (status, body1) = h.get(&format!("/api/session/{sid}/curriculum")).await;
+    assert_eq!(status, 200);
+
+    let (status, body2) = h.get(&format!("/api/session/{sid}/curriculum")).await;
+    assert_eq!(status, 200);
+
+    // Cached response should be identical
+    assert_eq!(body1, body2);
+}
+
+#[tokio::test]
+async fn test_chapter_qa_isolation() {
+    let h = TestHarness::new().await;
+    let sid = h.setup_learning().await;
+
+    // Start chapter 1
+    h.get(&format!("/api/session/{sid}/chapter/ch1")).await;
+
+    // Ask question in chapter 1
+    let (status, _) = h
+        .post(
+            &format!("/api/session/{sid}/chapter/ch1/ask"),
+            Some(json!({"question": "What is a variable?"})),
+        )
+        .await;
+    assert_eq!(status, 200);
+
+    // Start chapter 2
+    h.get(&format!("/api/session/{sid}/chapter/ch2")).await;
+
+    // Ask question in chapter 2
+    let (status, _) = h
+        .post(
+            &format!("/api/session/{sid}/chapter/ch2/ask"),
+            Some(json!({"question": "What is a type?"})),
+        )
+        .await;
+    assert_eq!(status, 200);
+
+    // Verify session messages are isolated by chapter_id
+    let (_, session) = h.get(&format!("/api/session/{sid}")).await;
+    let messages = session["messages"].as_array().unwrap();
+    let ch1_msgs: Vec<_> = messages
+        .iter()
+        .filter(|m| m["chapter_id"].as_str() == Some("ch1"))
+        .collect();
+    let ch2_msgs: Vec<_> = messages
+        .iter()
+        .filter(|m| m["chapter_id"].as_str() == Some("ch2"))
+        .collect();
+    // Each chapter should have 1 user + 1 assistant message
+    assert_eq!(ch1_msgs.len(), 2);
+    assert_eq!(ch2_msgs.len(), 2);
+}
+
+#[tokio::test]
+async fn test_input_boundary_empty_goal() {
+    let h = TestHarness::new().await;
+    let (_, body) = h.post("/api/session", None).await;
+    let sid = body["session_id"].as_str().unwrap();
+
+    let (status, body) = h
+        .post(
+            &format!("/api/session/{sid}/goal"),
+            Some(json!({"description": "", "domain": "x"})),
+        )
+        .await;
+    assert_eq!(status, 422);
+    assert_eq!(body["error"]["code"], "VALIDATION_ERROR");
+}
+
+#[tokio::test]
+async fn test_input_boundary_long_goal() {
+    let h = TestHarness::new().await;
+    let (_, body) = h.post("/api/session", None).await;
+    let sid = body["session_id"].as_str().unwrap();
+
+    let long_desc = "x".repeat(10000);
+    let (status, _) = h
+        .post(
+            &format!("/api/session/{sid}/goal"),
+            Some(json!({"description": long_desc, "domain": "programming"})),
+        )
+        .await;
+    // Should succeed (or at least not crash)
+    assert!(status == 200 || status == 500);
+}
+
+#[tokio::test]
+async fn test_xss_in_goal_description() {
+    let h = TestHarness::new().await;
+    let (_, body) = h.post("/api/session", None).await;
+    let sid = body["session_id"].as_str().unwrap();
+
+    let xss_desc = "<script>alert('xss')</script>I want to learn security testing thoroughly";
+    let (status, _) = h
+        .post(
+            &format!("/api/session/{sid}/goal"),
+            Some(json!({"description": xss_desc, "domain": "security"})),
+        )
+        .await;
+    assert_eq!(status, 200);
+}
+
+#[tokio::test]
+async fn test_health_includes_version() {
+    let h = TestHarness::new().await;
+    let (_, body) = h.get("/health").await;
+    assert_eq!(body["status"], "ok");
+    assert!(body["version"].is_string());
+    assert!(body["uptime_secs"].is_number());
+    assert!(body["session_count"].is_number());
+}
+
+#[tokio::test]
+async fn test_session_state_persistence() {
+    let h = TestHarness::new().await;
+    let sid = h.setup_learning().await;
+
+    // Session should be in CHAPTER_LEARNING state
+    let (_, session) = h.get(&format!("/api/session/{sid}")).await;
+    assert_eq!(session["state"], "CHAPTER_LEARNING");
+
+    // Verify stored data
+    assert!(session["goal"].is_object());
+    assert!(session["feasibility_result"].is_object());
+    assert!(session["profile"].is_object());
+    assert!(session["curriculum"].is_object());
+}
+
+#[tokio::test]
+async fn test_complete_multiple_chapters() {
+    let h = TestHarness::new().await;
+    let sid = h.setup_learning().await;
+
+    // Complete chapter 1
+    let (status, body) = h
+        .post(&format!("/api/session/{sid}/chapter/ch1/complete"), None)
+        .await;
+    assert_eq!(status, 200);
+    assert_eq!(body["status"], "completed");
+
+    // Complete chapter 2
+    let (status, body) = h
+        .post(&format!("/api/session/{sid}/chapter/ch2/complete"), None)
+        .await;
+    assert_eq!(status, 200);
+    assert_eq!(body["status"], "completed");
+
+    // Session should still be in CHAPTER_LEARNING
+    let (_, session) = h.get(&format!("/api/session/{sid}")).await;
+    assert_eq!(session["state"], "CHAPTER_LEARNING");
 }

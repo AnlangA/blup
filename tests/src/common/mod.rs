@@ -1,157 +1,148 @@
 use std::sync::Arc;
 
-use agent_core::llm::client::LlmClient;
-use agent_core::prompts::loader::PromptLoader;
 use agent_core::state::session::InMemorySessionStore;
-use agent_core::validation::schema_validator::SchemaValidator;
 use agent_core::{AppState, Config};
-use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
-use serde_json::json;
-use tokio::sync::Mutex;
+use blup_agent::config::AgentConfig;
+use blup_agent::prompt::PromptLoader;
+use blup_agent::provider::mock::MockProvider;
+use blup_agent::schema::SchemaValidator;
+use blup_agent::AgentEngine;
 
-// ── Mock LLM Gateway ──
-
-#[derive(Clone)]
-pub struct MockGatewayState {
-    pub responses: Arc<Mutex<Vec<String>>>,
+/// Create a mock provider preloaded with enough valid responses for the full
+/// learning flow. Each integration test gets a fresh instance.
+fn make_mock_provider() -> MockProvider {
+    let mock = MockProvider::new();
+    // Response 1: feasibility check
+    mock.push_response(
+        serde_json::json!({
+            "feasible": true,
+            "reason": "This is a well-defined learning goal.",
+            "suggestions": ["Start with fundamentals", "Practice regularly"],
+            "estimated_duration": "4 weeks",
+            "prerequisites": ["Basic computer skills"]
+        })
+        .to_string(),
+    );
+    // Response 2: profile collection (final round)
+    mock.push_response(
+        serde_json::json!({
+            "experience_level": {
+                "domain_knowledge": "beginner",
+                "related_domains": [],
+                "years_of_experience": 0.0
+            },
+            "learning_style": {
+                "preferred_format": ["text", "interactive"],
+                "pace_preference": "moderate"
+            },
+            "available_time": {
+                "hours_per_week": 10.0,
+                "preferred_session_length_minutes": 60.0
+            },
+            "goals": {
+                "primary_goal": "Learn Python for data analysis",
+                "secondary_goals": [],
+                "success_criteria": "Build a data pipeline"
+            },
+            "preferences": {
+                "language": "en",
+                "difficulty_bias": "standard",
+                "feedback_frequency": "end_of_section"
+            }
+        })
+        .to_string(),
+    );
+    // Response 3: curriculum plan
+    mock.push_response(
+        serde_json::json!({
+            "title": "Python Data Analysis",
+            "description": "A structured curriculum for learning Python data analysis",
+            "chapters": [
+                {
+                    "id": "ch1",
+                    "title": "Python Fundamentals",
+                    "order": 1,
+                    "objectives": ["Install Python", "Write basic programs"],
+                    "prerequisites": [],
+                    "estimated_minutes": 60
+                },
+                {
+                    "id": "ch2",
+                    "title": "Data Structures",
+                    "order": 2,
+                    "objectives": ["Understand lists", "Work with dictionaries"],
+                    "prerequisites": ["ch1"],
+                    "estimated_minutes": 90
+                }
+            ],
+            "estimated_duration": "4 weeks",
+            "prerequisites_summary": [],
+            "learning_objectives": ["Write Python scripts", "Analyze data"]
+        })
+        .to_string(),
+    );
+    // Response 4-8: chapter teaching / Q&A (5 extra text responses)
+    for _ in 0..10 {
+        mock.push_response("# Chapter Content\n\nThis is the chapter teaching content with explanations and examples.\n\n## Key Concepts\n\n- Concept 1\n- Concept 2\n\n## Examples\n\nHere are some practical examples.");
+    }
+    mock
 }
 
-async fn mock_complete(
-    State(state): State<MockGatewayState>,
-    Json(body): Json<serde_json::Value>,
-) -> axum::response::Response {
-    let messages = body["messages"].as_array().unwrap();
-    let user_content = messages
-        .iter()
-        .find(|m| m["role"] == "user")
-        .map(|m| m["content"].as_str().unwrap_or(""))
-        .unwrap_or("");
-    let system_content = messages
-        .iter()
-        .find(|m| m["role"] == "system")
-        .map(|m| m["content"].as_str().unwrap_or(""))
-        .unwrap_or("");
-
-    let content: serde_json::Value = if system_content.contains("Feasibility Check") {
-        json!({"feasible":true,"reason":"Well-defined and achievable.","suggestions":[],"estimated_duration":"4-6 weeks","prerequisites":["basic computer literacy"]})
-    } else if system_content.contains("Profile Collection") || system_content.contains("collection")
-    {
-        json!({"experience_level":{"domain_knowledge":"beginner"},"learning_style":{"preferred_format":["text"]},"available_time":{"hours_per_week":10}})
-    } else if system_content.contains("Curriculum Planning") || system_content.contains("planning")
-    {
-        json!({"title":"Python Fundamentals","description":"A comprehensive introduction","chapters":[{"id":"ch1","title":"Getting Started","order":1,"objectives":["Install Python"],"estimated_minutes":30},{"id":"ch2","title":"Variables","order":2,"objectives":["Understand variables"],"estimated_minutes":45}],"estimated_duration":"4-6 weeks"})
-    } else if system_content.contains("Chapter Teaching") || system_content.contains("teaching") {
-        json!({"content":"# Chapter Content\n\nLearning content in markdown."})
-    } else if system_content.contains("Question Answering") || system_content.contains("answering")
-    {
-        json!({"content":"This is the answer to your question."})
-    } else {
-        json!({"feasible":true,"reason":"Looks good.","suggestions":[],"estimated_duration":"2 weeks","prerequisites":[]})
-    };
-
-    {
-        let mut history = state.responses.lock().await;
-        history.push(user_content.to_string());
-    }
-
-    let is_stream = body["stream"].as_bool().unwrap_or(false);
-
-    if is_stream {
-        // Return SSE-formatted streaming response
-        let json_str = content.to_string();
-        let bytes = json_str.as_bytes();
-        let chunk_size = 16usize;
-        let chunks: Vec<&[u8]> = bytes.chunks(chunk_size).collect();
-
-        let sse_body = chunks
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                let text = String::from_utf8_lossy(c);
-                let chunk_json = json!({
-                    "content": text,
-                    "index": i as u32,
-                });
-                format!("data: {}\n\n", serde_json::to_string(&chunk_json).unwrap())
-            })
-            .collect::<Vec<_>>()
-            .join("")
-            + "data: {}\n\n";
-
-        axum::response::Response::builder()
-            .status(StatusCode::OK)
-            .header("content-type", "text/event-stream")
-            .body(axum::body::Body::from(sse_body))
-            .unwrap()
-    } else {
-        let body = axum::body::Body::from(
-            serde_json::to_string(&json!({
-                "content": content.to_string(),
-                "model": "mock-model",
-                "provider": "mock",
-                "usage": {"prompt_tokens":100,"completion_tokens":50,"total_tokens":150},
-                "finish_reason": "stop"
-            }))
-            .unwrap(),
-        );
-        axum::response::Response::builder()
-            .status(StatusCode::OK)
-            .header("content-type", "application/json")
-            .body(body)
-            .unwrap()
-    }
-}
-
-// ── Test Harness ──
-
+/// Test harness that spins up the agent-core server with a MockProvider.
 pub struct TestHarness {
     pub base_url: String,
     http: reqwest::Client,
-    _gateway: tokio::task::JoinHandle<()>,
     _server: tokio::task::JoinHandle<()>,
 }
 
 impl TestHarness {
     pub async fn new() -> Self {
-        // Start mock LLM gateway
-        let gw_state = MockGatewayState {
-            responses: Arc::new(Mutex::new(Vec::new())),
-        };
-        let gw_app = Router::new()
-            .route("/v1/gateway/complete", post(mock_complete))
-            .with_state(gw_state);
-        let gw_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let gw_addr = gw_listener.local_addr().unwrap();
-        let gw_url = format!("http://{}", gw_addr);
-        let gw_handle = tokio::spawn(async move {
-            axum::serve(gw_listener, gw_app).await.unwrap();
-        });
-
-        // Start the agent-core server
         let config = Config {
-            llm_gateway_url: gw_url.clone(),
             ..Default::default()
         };
+
         let store = InMemorySessionStore::new();
-        let llm = LlmClient::new(gw_url, String::new());
-        let prompt_loader = PromptLoader::new("../prompts");
-        let validator = SchemaValidator::new("../schemas");
+
+        let agent_config = AgentConfig {
+            provider: blup_agent::config::ProviderConfig {
+                provider_type: blup_agent::config::ProviderType::Mock,
+                model: "mock-model".to_string(),
+                ..Default::default()
+            },
+            prompts_dir: std::path::PathBuf::from("../prompts"),
+            schemas_dir: std::path::PathBuf::from("../schemas"),
+            audit: blup_agent::config::AuditConfig {
+                enabled: false,
+                storage_dir: std::path::PathBuf::from("/tmp/blup-test-audit"),
+            },
+            memory: blup_agent::config::MemoryConfig {
+                storage_dir: std::path::PathBuf::from("/tmp/blup-test-memory"),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mock = make_mock_provider();
+        let prompts = Arc::new(PromptLoader::new(&agent_config.prompts_dir));
+        let validator = Arc::new(SchemaValidator::new(&agent_config.schemas_dir));
+
+        let agent = Arc::new(
+            AgentEngine::with_provider(Arc::new(mock), prompts, validator, agent_config).await,
+        );
 
         let app_state = AppState {
             config: Arc::new(config),
             store,
-            llm,
-            prompts: Arc::new(prompt_loader),
-            validator: Arc::new(validator),
+            agent,
         };
 
         let app = agent_core::server::router::build_router(app_state);
-        let app_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let app_addr = app_listener.local_addr().unwrap();
-        let base_url = format!("http://{}", app_addr);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let base_url = format!("http://{}", addr);
 
         let server_handle = tokio::spawn(async move {
-            axum::serve(app_listener, app).await.unwrap();
+            axum::serve(listener, app).await.unwrap();
         });
 
         let http = reqwest::Client::new();
@@ -159,7 +150,6 @@ impl TestHarness {
         Self {
             base_url,
             http,
-            _gateway: gw_handle,
             _server: server_handle,
         }
     }
@@ -176,6 +166,10 @@ impl TestHarness {
         self.request("GET", path, None).await
     }
 
+    pub async fn delete(&self, path: &str) -> (u16, serde_json::Value) {
+        self.request("DELETE", path, None).await
+    }
+
     /// Submit 3 profile answers to complete the profile collection flow.
     pub async fn complete_profile(&self, sid: &str) {
         let answers = [
@@ -187,7 +181,7 @@ impl TestHarness {
             let (status, _body) = self
                 .post(
                     &format!("/api/session/{sid}/profile/answer"),
-                    Some(json!({"question_id": format!("q{i}"), "answer": *ans})),
+                    Some(serde_json::json!({"question_id": format!("q{i}"), "answer": *ans})),
                 )
                 .await;
             assert_eq!(status, 200, "Profile answer {i} failed");
@@ -202,7 +196,7 @@ impl TestHarness {
 
         self.post(
             &format!("/api/session/{sid}/goal"),
-            Some(json!({"description": "Learn Python for data analysis", "domain": "programming"})),
+            Some(serde_json::json!({"description": "Learn Python for data analysis", "domain": "programming"})),
         )
         .await;
 
@@ -222,6 +216,7 @@ impl TestHarness {
         let mut req = match method {
             "GET" => self.http.get(&url),
             "POST" => self.http.post(&url),
+            "DELETE" => self.http.delete(&url),
             _ => self.http.get(&url),
         };
 
@@ -232,12 +227,12 @@ impl TestHarness {
         match req.send().await {
             Ok(resp) => {
                 let status = resp.status().as_u16();
-                let body: serde_json::Value = resp.json().await.unwrap_or(json!({}));
+                let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({}));
                 (status, body)
             }
             Err(e) => {
                 eprintln!("Request error: {e}");
-                (0, json!({"error": e.to_string()}))
+                (0, serde_json::json!({"error": e.to_string()}))
             }
         }
     }

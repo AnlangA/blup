@@ -4,7 +4,10 @@
   "title": "LearningGoal",
   "type": "object",
   "version": "1.0.0",
-  "required": ["description", "domain"],
+  "required": [
+    "description",
+    "domain"
+  ],
   "properties": {
     "description": {
       "type": "string",
@@ -25,8 +28,14 @@
     },
     "current_level": {
       "type": "string",
-      "enum": ["beginner", "intermediate", "advanced", "unknown"],
+      "enum": [
+        "beginner",
+        "intermediate",
+        "advanced",
+        "unknown"
+      ],
       "description": "Self-assessed current level"
     }
-  }
+  },
+  "additionalProperties": false
 }

@@ -4,12 +4,23 @@
   "title": "ChapterProgress",
   "type": "object",
   "version": "1.0.0",
-  "required": ["chapter_id", "status", "completion"],
+  "required": [
+    "chapter_id",
+    "status",
+    "completion"
+  ],
   "properties": {
-    "chapter_id": { "type": "string" },
+    "chapter_id": {
+      "type": "string"
+    },
     "status": {
       "type": "string",
-      "enum": ["not_started", "in_progress", "completed", "skipped"]
+      "enum": [
+        "not_started",
+        "in_progress",
+        "completed",
+        "skipped"
+      ]
     },
     "completion": {
       "type": "number",
@@ -17,13 +28,28 @@
       "maximum": 100,
       "description": "Completion percentage (0-100)"
     },
-    "time_spent_minutes": { "type": "integer", "minimum": 0 },
-    "exercises_completed": { "type": "integer", "minimum": 0 },
-    "exercises_total": { "type": "integer", "minimum": 0 },
-    "last_accessed": { "type": "string", "format": "date-time" },
+    "time_spent_minutes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "exercises_completed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "exercises_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_accessed": {
+      "type": "string",
+      "format": "date-time"
+    },
     "notes": {
       "type": "array",
-      "items": { "type": "string", "maxLength": 1000 },
+      "items": {
+        "type": "string",
+        "maxLength": 1000
+      },
       "maxItems": 20
     },
     "difficulty_rating": {
@@ -32,5 +58,6 @@
       "maximum": 5,
       "description": "Learner's perceived difficulty (1=too easy, 5=too hard)"
     }
-  }
+  },
+  "additionalProperties": false
 }

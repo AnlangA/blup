@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use agent_core::{llm, prompts, server, state, validation, AppState, Config};
+use agent_core::{server, state, AppState, Config};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -23,7 +23,6 @@ async fn main() -> anyhow::Result<()> {
         host = %config.host,
         port = %config.port,
         model = %config.llm_model,
-        gateway_url = %config.llm_gateway_url,
         prompts_dir = %config.prompts_dir.display(),
         schemas_dir = %config.schemas_dir.display(),
         data_dir = %config.data_dir.display(),
@@ -35,28 +34,31 @@ async fn main() -> anyhow::Result<()> {
     let store = state::session::InMemorySessionStore::with_limit(config.max_sessions)
         .with_persistence(config.data_dir.clone());
 
-    // Restore persisted sessions
     store.load_from_disk().await;
 
-    // Start background eviction of stale sessions
     store.start_eviction_task(
         Duration::from_secs(config.session_ttl_hours * 3600),
-        Duration::from_secs(300), // check every 5 minutes
+        Duration::from_secs(300),
     );
 
-    let llm = llm::client::LlmClient::new(
-        config.llm_gateway_url.clone(),
-        config.llm_gateway_secret.clone(),
+    // Build blup-agent config from environment, then overlay paths from
+    // agent-core config so prompts/schemas/data dirs stay consistent.
+    let mut agent_config = blup_agent::config::AgentConfig::from_env();
+    agent_config.prompts_dir = config.prompts_dir.clone();
+    agent_config.schemas_dir = config.schemas_dir.clone();
+    agent_config.audit.storage_dir = config.data_dir.join("audit");
+    agent_config.memory.storage_dir = config.data_dir.join("memory");
+
+    let agent = Arc::new(
+        blup_agent::AgentEngine::new(agent_config)
+            .await
+            .expect("Failed to create agent engine"),
     );
-    let prompt_loader = prompts::loader::PromptLoader::new(&config.prompts_dir);
-    let validator = validation::schema_validator::SchemaValidator::new(&config.schemas_dir);
 
     let app_state = AppState {
         config: Arc::new(config.clone()),
         store,
-        llm,
-        prompts: Arc::new(prompt_loader),
-        validator: Arc::new(validator),
+        agent,
     };
 
     let router = server::router::build_router(app_state);

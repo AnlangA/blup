@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use super::types::{SessionState, StateError, Transition};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransitionRecord {
     pub from: SessionState,
     pub to: SessionState,
@@ -100,6 +101,14 @@ impl StateMachine {
 
     pub fn history(&self) -> &[TransitionRecord] {
         &self.transition_history
+    }
+
+    /// Replay a historical transition record without re-validating.
+    /// Used when reconstructing state machine from persisted snapshots.
+    pub fn replay_record(&mut self, record: &TransitionRecord) {
+        self.previous_state = Some(record.from);
+        self.current_state = record.to;
+        self.transition_history.push(record.clone());
     }
 }
 

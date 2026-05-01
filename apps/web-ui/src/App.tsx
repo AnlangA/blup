@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useSessionStore } from "./state/sessionStore";
-import { useCreatePlan, useSession, useSyncPlanFromSession } from "./hooks/query";
+import { useCreatePlan, useSession, useSessionPlanSync } from "./hooks/query";
 import { GoalInput } from "./components/session/GoalInput";
 import { FeasibilityResult } from "./components/session/FeasibilityResult";
 import { ProfileQuestion } from "./components/session/ProfileQuestion";
@@ -16,11 +16,12 @@ function MainContent() {
 
   const {
     data: session,
+    isLoading: sessionLoading,
     isError: sessionError,
     error: sessionErr,
   } = useSession(sessionId);
 
-  useSyncPlanFromSession(sessionId, session);
+  useSessionPlanSync(sessionId, session);
 
   useEffect(() => {
     if (session?.current_chapter_id && !currentChapterId) {
@@ -28,7 +29,15 @@ function MainContent() {
     }
   }, [session?.current_chapter_id, currentChapterId, setChapter]);
 
-  const state = session?.state ?? "IDLE";
+  // Show loading skeleton while session data is fetched for the first time.
+  // This prevents the flash of GoalInput / welcome screen on page refresh.
+  if (sessionLoading) {
+    return (
+      <div className="main-content-area">
+        <div className="loading-screen">Loading...</div>
+      </div>
+    );
+  }
 
   if (sessionError) {
     const code = (sessionErr as { code?: string } | null)?.code;
@@ -47,6 +56,8 @@ function MainContent() {
       </div>
     );
   }
+
+  const state = session?.state ?? "IDLE";
 
   if (state === "ERROR") {
     return (
@@ -96,12 +107,14 @@ function App() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (createPlan.isPending && plans.length === 0) {
+  // No plans yet — either showing welcome or auto-creating one.
+  // Show loading to avoid a flash of the welcome screen before the
+  // auto-create mutation fires on first render.
+  if (plans.length === 0) {
+    if (createPlan.isError) {
+      return <ErrorDisplay />;
+    }
     return <div className="loading-screen">Initializing...</div>;
-  }
-
-  if (createPlan.isError && plans.length === 0) {
-    return <ErrorDisplay />;
   }
 
   return (

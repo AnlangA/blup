@@ -1,16 +1,16 @@
 import { useSessionStore } from '../../state/sessionStore';
 import { useSession } from '../../hooks/query';
-import type { FeasibilityData } from '../../api/client';
+import { parseSession } from '../../types/session';
+import type { FeasibilityData } from '../../types/session';
 
 export function FeasibilityResult() {
   const sessionId = useSessionStore((s) => s.sessionId);
-  const { data: session } = useSession(sessionId);
+  const { data: rawSession } = useSession(sessionId);
   const reset = useSessionStore((s) => s.reset);
 
+  const session = rawSession ? parseSession(rawSession as unknown as Record<string, unknown>) : null;
   const state = session?.state ?? 'IDLE';
-  const feasibility = session?.feasibility_result as unknown as
-    | FeasibilityData
-    | null;
+  const feasibility: FeasibilityData | null = session?.feasibilityResult ?? null;
 
   if (state !== 'FEASIBILITY_CHECK' && state !== 'PROFILE_COLLECTION') {
     return null;
@@ -34,10 +34,10 @@ export function FeasibilityResult() {
         <div className="result-card success">
           <p className="verdict">Your learning goal looks great!</p>
           <p className="reason">{feasibility.reason}</p>
-          {feasibility.estimated_duration && (
+          {feasibility.estimatedDuration && (
             <p className="meta">
               Estimated duration:{' '}
-              <strong>{feasibility.estimated_duration}</strong>
+              <strong>{feasibility.estimatedDuration}</strong>
             </p>
           )}
           {feasibility.prerequisites?.length > 0 && (

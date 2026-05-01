@@ -2,12 +2,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 pub mod api;
-pub mod llm;
-pub mod models;
-pub mod prompts;
+pub mod error;
 pub mod server;
 pub mod state;
-pub mod validation;
 
 /// Application configuration loaded from environment variables.
 #[derive(Clone)]
@@ -65,7 +62,6 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Load configuration from environment variables.
     pub fn from_env() -> Self {
         let mut config = Config::default();
 
@@ -123,7 +119,5 @@ impl Config {
 pub struct AppState {
     pub config: Arc<Config>,
     pub store: state::session::InMemorySessionStore,
-    pub llm: llm::client::LlmClient,
-    pub prompts: Arc<prompts::loader::PromptLoader>,
-    pub validator: Arc<validation::schema_validator::SchemaValidator>,
+    pub agent: Arc<blup_agent::AgentEngine>,
 }

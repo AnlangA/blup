@@ -1,0 +1,14 @@
+{
+  "title": "Test Curriculum",
+  "description": "A test curriculum",
+  "chapters": [
+    {
+      "id": "ch1",
+      "title": "Chapter 1",
+      "order": 1,
+      "objectives": ["Learn something"],
+      "estimated_minutes": 30
+    }
+  ],
+  "estimated_duration": "1 hour"
+}

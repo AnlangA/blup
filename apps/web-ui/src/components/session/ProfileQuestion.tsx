@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSessionStore } from '../../state/sessionStore';
 import { useSession, useSubmitProfile } from '../../hooks/query';
+import { parseSession } from '../../types/session';
 
 const QUESTIONS: Record<number, { prompt: string; options: string[] }> = {
   0: {
@@ -34,11 +35,12 @@ const QUESTIONS: Record<number, { prompt: string; options: string[] }> = {
 
 export function ProfileQuestion() {
   const sessionId = useSessionStore((s) => s.sessionId);
-  const { data: session } = useSession(sessionId);
+  const { data: rawSession } = useSession(sessionId);
   const submitProfile = useSubmitProfile(sessionId);
   const [answer, setAnswer] = useState('');
 
-  const round = (session?.profile_rounds as number) ?? 0;
+  const session = rawSession ? parseSession(rawSession as unknown as Record<string, unknown>) : null;
+  const round = session?.profileRounds ?? 0;
   const question = QUESTIONS[round] ?? QUESTIONS[0];
   const totalRounds = 3;
 

@@ -28,7 +28,7 @@ impl std::fmt::Display for SessionState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Transition {
     SubmitGoal,
     GoalFeasible,

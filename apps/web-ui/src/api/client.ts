@@ -90,7 +90,7 @@ export interface SessionSnapshot {
   goal: Record<string, unknown> | null;
   feasibility_result: Record<string, unknown> | null;
   profile: Record<string, unknown> | null;
-  profile_rounds?: number;
+  profile_rounds: number;
   curriculum: CurriculumPlan | null;
   current_chapter_id: string | null;
   chapter_contents: Record<string, string>;

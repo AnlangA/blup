@@ -5,21 +5,23 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use super::machine::StateMachine;
+use super::domain::*;
+use super::machine::{StateMachine, TransitionRecord};
 use super::types::SessionState;
 
 #[derive(Debug, Clone)]
 pub struct Session {
     pub id: Uuid,
     pub state_machine: StateMachine,
-    pub goal: Option<serde_json::Value>,
-    pub feasibility_result: Option<serde_json::Value>,
-    pub profile: Option<serde_json::Value>,
+    pub version: u64,
+    pub goal: Option<LearningGoal>,
+    pub feasibility_result: Option<FeasibilityResult>,
+    pub profile: Option<UserProfile>,
     pub profile_rounds: u32,
-    pub curriculum: Option<serde_json::Value>,
+    pub curriculum: Option<CurriculumPlan>,
     pub current_chapter_id: Option<String>,
     pub chapter_contents: HashMap<String, String>,
-    pub messages: Vec<serde_json::Value>,
+    pub messages: Vec<SessionMessage>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -36,14 +38,18 @@ struct SessionSnapshot {
     id: Uuid,
     current_state: SessionState,
     previous_state: Option<SessionState>,
-    goal: Option<serde_json::Value>,
-    feasibility_result: Option<serde_json::Value>,
-    profile: Option<serde_json::Value>,
+    #[serde(default)]
+    version: u64,
+    #[serde(default)]
+    transition_history: Vec<TransitionRecord>,
+    goal: Option<LearningGoal>,
+    feasibility_result: Option<FeasibilityResult>,
+    profile: Option<UserProfile>,
     profile_rounds: u32,
-    curriculum: Option<serde_json::Value>,
+    curriculum: Option<CurriculumPlan>,
     current_chapter_id: Option<String>,
     chapter_contents: HashMap<String, String>,
-    messages: Vec<serde_json::Value>,
+    messages: Vec<SessionMessage>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -54,6 +60,8 @@ impl From<&Session> for SessionSnapshot {
             id: s.id,
             current_state: s.state(),
             previous_state: s.state_machine.previous_state(),
+            version: s.version,
+            transition_history: s.state_machine.history().to_vec(),
             goal: s.goal.clone(),
             feasibility_result: s.feasibility_result.clone(),
             profile: s.profile.clone(),
@@ -74,9 +82,14 @@ impl SessionSnapshot {
         if let Some(prev) = self.previous_state {
             sm.set_previous_state(prev);
         }
+        // Replay transition history if available (backward compat: old files lack this)
+        for record in &self.transition_history {
+            sm.replay_record(record);
+        }
         Session {
             id: self.id,
             state_machine: sm,
+            version: self.version,
             goal: self.goal,
             feasibility_result: self.feasibility_result,
             profile: self.profile,
@@ -187,11 +200,15 @@ impl InMemorySessionStore {
         match serde_json::to_string(&snapshot) {
             Ok(json) => {
                 if let Err(e) = tokio::fs::write(&path, &json).await {
-                    tracing::warn!(path = %path.display(), error = %e, "Failed to persist session");
+                    tracing::warn!(path = %path.display(), error = %e, "Failed to persist session, retrying");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    if let Err(e2) = tokio::fs::write(&path, &json).await {
+                        tracing::error!(path = %path.display(), error = %e2, "Persist failed after retry");
+                    }
                 }
             }
             Err(e) => {
-                tracing::warn!(error = %e, session_id = %id, "Failed to serialize session");
+                tracing::error!(error = %e, session_id = %id, "Failed to serialize session for persistence");
             }
         }
     }
@@ -215,6 +232,7 @@ impl InMemorySessionStore {
         let session = Session {
             id,
             state_machine: StateMachine::new(),
+            version: 0,
             goal: None,
             feasibility_result: None,
             profile: None,
@@ -241,6 +259,37 @@ impl InMemorySessionStore {
     /// Get a handle to an existing session.
     pub async fn get(&self, id: Uuid) -> Option<SessionHandle> {
         self.sessions.read().await.get(&id).cloned()
+    }
+
+    /// Get the current version of a session without holding the lock.
+    pub async fn version(&self, id: Uuid) -> Option<u64> {
+        let handle = self.get(id).await?;
+        let v = handle.read().await.version;
+        Some(v)
+    }
+
+    /// Attempt a version-checked mutation. Returns the result of `f`
+    /// if the version matches, or `None` if a conflict is detected.
+    pub async fn try_mutate<F, R>(&self, id: Uuid, expected_version: u64, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut Session) -> R,
+    {
+        let handle = self.get(id).await?;
+        let mut s = handle.write().await;
+        if s.version != expected_version {
+            tracing::warn!(
+                session_id = %id,
+                expected = expected_version,
+                actual = s.version,
+                "Version conflict detected"
+            );
+            return None;
+        }
+        let result = f(&mut s);
+        s.version += 1;
+        s.updated_at = chrono::Utc::now();
+        self.persist(s.id);
+        Some(result)
     }
 
     /// Remove a session from the store and disk.
@@ -271,15 +320,13 @@ impl InMemorySessionStore {
                         goal_description: session
                             .goal
                             .as_ref()
-                            .and_then(|g| g.get("description"))
-                            .and_then(|v| v.as_str())
+                            .map(|g| g.description.as_str())
                             .unwrap_or("Untitled")
                             .to_string(),
                         domain: session
                             .goal
                             .as_ref()
-                            .and_then(|g| g.get("domain"))
-                            .and_then(|v| v.as_str())
+                            .map(|g| g.domain.as_str())
                             .unwrap_or("")
                             .to_string(),
                         updated_at: session.updated_at.to_rfc3339(),

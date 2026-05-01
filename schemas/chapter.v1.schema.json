@@ -4,7 +4,12 @@
   "title": "Chapter",
   "type": "object",
   "version": "1.0.0",
-  "required": ["id", "title", "order", "objectives"],
+  "required": [
+    "id",
+    "title",
+    "order",
+    "objectives"
+  ],
   "properties": {
     "id": {
       "type": "string",
@@ -23,13 +28,19 @@
     },
     "objectives": {
       "type": "array",
-      "items": { "type": "string", "maxLength": 500 },
+      "items": {
+        "type": "string",
+        "maxLength": 500
+      },
       "minItems": 1,
       "maxItems": 10
     },
     "prerequisites": {
       "type": "array",
-      "items": { "type": "string", "maxLength": 200 },
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      },
       "maxItems": 10
     },
     "content": {
@@ -44,7 +55,10 @@
     },
     "key_concepts": {
       "type": "array",
-      "items": { "type": "string", "maxLength": 200 },
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      },
       "maxItems": 30
     },
     "exercises": {
@@ -52,19 +66,36 @@
       "items": {
         "type": "object",
         "properties": {
-          "question": { "type": "string", "maxLength": 2000 },
+          "question": {
+            "type": "string",
+            "maxLength": 2000
+          },
           "type": {
             "type": "string",
-            "enum": ["multiple_choice", "short_answer", "coding", "reflection"]
+            "enum": [
+              "multiple_choice",
+              "short_answer",
+              "coding",
+              "reflection"
+            ]
           },
           "difficulty": {
             "type": "string",
-            "enum": ["easy", "medium", "hard"]
+            "enum": [
+              "easy",
+              "medium",
+              "hard"
+            ]
           }
         },
-        "required": ["question", "type"]
+        "required": [
+          "question",
+          "type"
+        ],
+        "additionalProperties": false
       },
       "maxItems": 20
     }
-  }
+  },
+  "additionalProperties": false
 }

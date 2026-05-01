@@ -1,0 +1,57 @@
+[package]
+name = "blup-agent"
+version = "0.2.0"
+edition = "2021"
+description = "Blup AI agent — multi-provider LLM, MCP, memory, audit, tools"
+
+[dependencies]
+# HTTP & Async
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tokio = { version = "1", features = ["sync", "macros", "rt-multi-thread", "fs", "time"] }
+tokio-stream = "0.1"
+futures = "0.3"
+async-stream = "0.3"
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "2"
+
+# Logging & Tracing
+tracing = "0.1"
+
+# Schema validation
+jsonschema = "0.46"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID generation
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# SHA hashing for audit
+sha2 = "0.10"
+
+# LLM Providers (BYOT for flexible JSON-based API calls)
+async-openai = { version = "0.36", features = ["byot", "chat-completion"] }
+
+# MCP Protocol (official Rust SDK)
+rmcp = { version = "0.1", features = [
+    "client",
+    "transport-child-process",
+    "transport-sse",
+] }
+
+# Pin projection
+pin-project-lite = "0.2"
+
+# Concurrent data structures
+dashmap = "6"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+serde_json = "1"
+tempfile = "3"

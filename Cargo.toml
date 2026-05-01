@@ -1,3 +1,3 @@
 [workspace]
-members = ["crates/agent-core", "tests", "tools/schema-validator"]
+members = ["crates/agent-core", "crates/blup-agent", "tests", "tools/schema-validator"]
 resolver = "2"

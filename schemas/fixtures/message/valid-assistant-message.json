@@ -3,5 +3,6 @@
   "role": "assistant",
   "content": "A DataFrame is a two-dimensional labeled data structure in pandas, similar to a spreadsheet.",
   "timestamp": "2025-01-15T10:30:05Z",
-  "content_type": "explanation"
+  "content_type": "explanation",
+  "chapter_id": "ch1"
 }

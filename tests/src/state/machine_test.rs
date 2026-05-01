@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use agent_core::prompts::loader::PromptLoader;
 use agent_core::state::machine::StateMachine;
 use agent_core::state::types::{SessionState, Transition};
-use agent_core::validation::schema_validator::SchemaValidator;
+use blup_agent::prompt::PromptLoader;
+use blup_agent::schema::SchemaValidator;
 
 #[test]
 fn test_initial_state_is_idle() {
@@ -108,7 +108,9 @@ fn test_prompt_loader_loads_templates() {
     let loader = PromptLoader::new("../prompts");
     let template = loader.load("feasibility_check", 1);
     assert!(template.is_ok());
-    assert!(template.unwrap().contains("Feasibility Check"));
+    assert!(template
+        .unwrap()
+        .contains("Evaluate whether a learning goal"));
 }
 
 #[test]
