@@ -1,0 +1,48 @@
+{
+  "fixture_id": "curriculum_planning-beginner_python",
+  "description": "Curriculum for a beginner learning Python for data analysis",
+  "prompt_name": "curriculum_planning",
+  "prompt_version": 1,
+  "target_schema": "curriculum_plan.v1.schema.json",
+  "input": {
+    "learning_goal": "Learn Python for data analysis with pandas",
+    "user_profile": "{\"experience_level\":{\"domain_knowledge\":\"beginner\"},\"learning_style\":{\"preferred_format\":[\"text\",\"exercise-based\"]},\"available_time\":{\"hours_per_week\":5}}"
+  },
+  "expected_output": {
+    "title": "Python Data Analysis Fundamentals",
+    "description": "A hands-on curriculum covering Python basics and data analysis with pandas",
+    "chapters": [
+      {
+        "id": "python-basics",
+        "title": "Python Basics",
+        "order": 1,
+        "objectives": ["Install Python", "Write basic programs", "Understand variables and data types"],
+        "estimated_minutes": 45,
+        "prerequisites": []
+      },
+      {
+        "id": "data-structures",
+        "title": "Data Structures",
+        "order": 2,
+        "objectives": ["Work with lists and dictionaries", "Understand tabular data concepts"],
+        "estimated_minutes": 60,
+        "prerequisites": ["python-basics"]
+      },
+      {
+        "id": "pandas-intro",
+        "title": "Introduction to Pandas",
+        "order": 3,
+        "objectives": ["Read CSV files", "Create DataFrames", "Basic data filtering"],
+        "estimated_minutes": 75,
+        "prerequisites": ["data-structures"]
+      }
+    ],
+    "estimated_duration": "3-4 weeks",
+    "prerequisites_summary": ["basic computer skills"],
+    "learning_objectives": ["Write Python scripts for data analysis", "Read and filter data with pandas", "Create basic visualizations"]
+  },
+  "semantic_checks": [],
+  "captured_from": null,
+  "captured_at": null,
+  "last_passed": null
+}

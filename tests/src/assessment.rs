@@ -469,3 +469,176 @@ fn test_scorer_zero_score() {
     assert_eq!(Scorer::grade_letter(&eval), 'F');
     assert!(!Scorer::is_passing(&eval, 0.7));
 }
+
+// ── Phase 2: Additional boundary tests ──
+
+#[test]
+fn test_multiple_choice_single_option() {
+    let engine = AssessmentEngine::new();
+    let exercise =
+        Exercise::new_multiple_choice("ch1", "Is this true?", vec!["Yes".to_string()], 0, 1.0);
+
+    let answer = json!({"selected_index": 0});
+    let result = engine.evaluate(&exercise, &answer).unwrap();
+    assert_eq!(result.score, 1.0);
+    assert!(result.is_correct);
+}
+
+#[test]
+fn test_multiple_choice_many_options() {
+    let engine = AssessmentEngine::new();
+    let options: Vec<String> = (0..10).map(|i| format!("Option {}", i)).collect();
+    let exercise = Exercise::new_multiple_choice("ch1", "Pick the correct one", options, 7, 1.0);
+
+    let answer = json!({"selected_index": 7});
+    let result = engine.evaluate(&exercise, &answer).unwrap();
+    assert_eq!(result.score, 1.0);
+    assert!(result.is_correct);
+}
+
+#[test]
+fn test_short_answer_all_key_points_matched() {
+    let engine = AssessmentEngine::new();
+    let exercise = Exercise::new_short_answer(
+        "ch1",
+        "What are the key features of Rust?",
+        "Rust has memory safety, zero-cost abstractions, and concurrency",
+        vec![
+            "memory safety".to_string(),
+            "zero-cost abstractions".to_string(),
+            "concurrency".to_string(),
+        ],
+        3.0,
+    );
+
+    let answer = json!({
+        "answer": "Rust has memory safety, zero-cost abstractions, and concurrency support"
+    });
+
+    let result = engine.evaluate(&exercise, &answer).unwrap();
+    assert!(result.score > 0.0);
+    assert!(result.is_correct);
+}
+
+#[test]
+fn test_coding_with_multiple_test_cases() {
+    let engine = AssessmentEngine::new();
+    let exercise = Exercise::new_coding(
+        "ch1",
+        "Write a function to check if a number is even",
+        "python",
+        vec![
+            TestCase {
+                input: "2".to_string(),
+                expected_output: "True".to_string(),
+            },
+            TestCase {
+                input: "3".to_string(),
+                expected_output: "False".to_string(),
+            },
+            TestCase {
+                input: "0".to_string(),
+                expected_output: "True".to_string(),
+            },
+        ],
+        3.0,
+    );
+
+    let answer = json!({
+        "code": "def is_even(n):\n    return n % 2 == 0"
+    });
+
+    let result = engine.evaluate(&exercise, &answer).unwrap();
+    assert_eq!(result.score, 3.0);
+    assert!(result.is_correct);
+}
+
+#[test]
+fn test_reflection_with_rubric_dimensions() {
+    let engine = AssessmentEngine::new();
+    let dimensions = vec![
+        assessment_engine::models::exercise::RubricDimension {
+            name: "understanding".to_string(),
+            description: "Demonstrates understanding".to_string(),
+            max_score: 2.0,
+        },
+        assessment_engine::models::exercise::RubricDimension {
+            name: "depth".to_string(),
+            description: "Provides depth analysis".to_string(),
+            max_score: 2.0,
+        },
+    ];
+
+    let exercise = Exercise {
+        id: uuid::Uuid::new_v4(),
+        chapter_id: "ch1".to_string(),
+        question: "Reflect on what you learned".to_string(),
+        exercise_type: ExerciseType::Reflection {
+            prompt: "Write about what you learned".to_string(),
+            min_length: 50,
+            rubric_dimensions: dimensions,
+        },
+        difficulty: Difficulty::Medium,
+        rubric: None,
+        max_score: 4.0,
+        hints: Vec::new(),
+        explanation: None,
+    };
+
+    let answer = json!({
+        "reflection": "This chapter demonstrates that Rust is a systems programming language focusing on memory safety and performance. I gained a deeper understanding of the concept of ownership which is central to Rust's design. The depth of analysis shows how these concepts work together."
+    });
+
+    let result = engine.evaluate(&exercise, &answer).unwrap();
+    assert!(result.score > 0.0);
+    assert!(result.is_correct);
+}
+
+#[test]
+fn test_coding_with_starter_code() {
+    let engine = AssessmentEngine::new();
+    let exercise = Exercise {
+        id: uuid::Uuid::new_v4(),
+        chapter_id: "ch1".to_string(),
+        question: "Complete the function".to_string(),
+        exercise_type: ExerciseType::Coding {
+            language: "python".to_string(),
+            starter_code: Some("def add(a, b):\n    # TODO: implement\n    pass".to_string()),
+            test_cases: vec![TestCase {
+                input: "2, 3".to_string(),
+                expected_output: "5".to_string(),
+            }],
+        },
+        difficulty: Difficulty::Easy,
+        rubric: None,
+        max_score: 1.0,
+        hints: Vec::new(),
+        explanation: None,
+    };
+
+    let answer = json!({
+        "code": "def add(a, b):\n    return a + b"
+    });
+
+    let result = engine.evaluate(&exercise, &answer).unwrap();
+    assert_eq!(result.score, 1.0);
+    assert!(result.is_correct);
+}
+
+#[test]
+fn test_exercise_creation_helpers() {
+    let mc = Exercise::new_multiple_choice(
+        "ch1",
+        "Question",
+        vec!["A".to_string(), "B".to_string()],
+        0,
+        1.0,
+    );
+    assert_eq!(mc.max_score, 1.0);
+
+    let sa = Exercise::new_short_answer("ch1", "Question", "Answer", vec!["key".to_string()], 2.0);
+    assert_eq!(sa.max_score, 2.0);
+
+    let coding = Exercise::new_coding("ch1", "Question", "python", vec![], 3.0);
+    assert_eq!(coding.max_score, 3.0);
+}

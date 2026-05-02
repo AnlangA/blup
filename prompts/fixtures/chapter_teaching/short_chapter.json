@@ -1,0 +1,25 @@
+{
+  "fixture_id": "chapter_teaching-short_chapter",
+  "description": "Teaching a short introductory chapter",
+  "prompt_name": "chapter_teaching",
+  "prompt_version": 1,
+  "target_schema": "chapter.v1.schema.json",
+  "input": {
+    "chapter_id": "python-basics",
+    "user_profile": "{\"experience_level\":{\"domain_knowledge\":\"beginner\"},\"learning_style\":{\"preferred_format\":[\"text\"]},\"available_time\":{\"hours_per_week\":5}}",
+    "curriculum_context": "{\"title\":\"Python Fundamentals\",\"chapters\":[{\"id\":\"python-basics\",\"title\":\"Python Basics\"}]}"
+  },
+  "expected_output": {
+    "id": "python-basics",
+    "title": "Python Basics",
+    "order": 1,
+    "objectives": ["Install Python", "Write first program", "Understand variables"],
+    "content": "## Installing Python\n\nDownload Python from python.org and run the installer.\n\n## Your First Program\n\nOpen a terminal and type:\n\n```python\nprint('Hello, World!')\n```\n\n## Variables\n\nVariables store data:\n\n```python\nname = 'Alice'\nage = 25\n```",
+    "estimated_minutes": 30,
+    "key_concepts": ["variables", "print function", "installation"]
+  },
+  "semantic_checks": [],
+  "captured_from": null,
+  "captured_at": null,
+  "last_passed": null
+}

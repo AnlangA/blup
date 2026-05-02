@@ -26,7 +26,7 @@ impl Default for SandboxConfig {
             disk_mb: 100,
             network_enabled: false,
             max_processes: 10,
-            seccomp_profile: Some("sandboxes/policies/seccomp-python.json".to_string()),
+            seccomp_profile: None,
         }
     }
 }

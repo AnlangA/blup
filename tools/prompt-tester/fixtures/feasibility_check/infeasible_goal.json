@@ -1,0 +1,25 @@
+{
+  "fixture_id": "feasibility_check-infeasible_goal",
+  "description": "An overly broad goal without specificity should be evaluated as infeasible",
+  "prompt_name": "feasibility_check",
+  "prompt_version": 1,
+  "target_schema": "feasibility_result.v1.schema.json",
+  "input": {
+    "learning_goal": "Learn everything about computers and programming",
+    "domain": "computing",
+    "context": ""
+  },
+  "expected_output": {
+    "feasible": false,
+    "reason": "This goal is too broad. Learning everything about computers spans countless subfields. Please narrow your focus to a specific area.",
+    "suggestions": ["Choose a specific programming language", "Focus on one domain like web development or data science", "Example: 'Learn Python to build web applications'"],
+    "estimated_duration": "N/A — refine goal first",
+    "prerequisites": []
+  },
+  "semantic_checks": [
+    {"rule": "reason_is_specific", "description": "Reason should be at least 20 characters long"}
+  ],
+  "captured_from": null,
+  "captured_at": null,
+  "last_passed": null
+}

@@ -1,0 +1,40 @@
+name: sandbox-node
+description: Node.js 22 execution sandbox for JavaScript code exercises
+version: 1
+dockerfile: sandboxes/docker/Dockerfile.node
+
+base_image:
+  name: node:22-slim
+  digest: sha256:node-22-lts
+
+pinned_packages: []
+
+build_args:
+  USER_ID: "1000"
+  USER_NAME: sandbox
+
+security:
+  seccomp_profile: sandboxes/policies/seccomp-python.json
+  read_only_rootfs: true
+  no_new_privileges: true
+  cap_drop: ["ALL"]
+
+limits:
+  compile_timeout_secs: 15
+  run_timeout_secs: 10
+  memory_mb: 512
+  cpu_count: 1
+  disk_mb: 100
+  max_processes: 10
+  network_enabled: false
+
+tests:
+  - name: node_version
+    command: ["node", "--version"]
+    expected_output: "v22"
+  - name: basic_execution
+    command: ["node", "-e", "console.log('hello')"]
+    expected_output: "hello"
+  - name: network_blocked
+    command: ["node", "-e", "try { require('http').get('http://example.com'); } catch(e) { console.log('NETWORK_BLOCKED'); }"]
+    expected_output: "NETWORK_BLOCKED"

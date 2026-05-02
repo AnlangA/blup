@@ -1,0 +1,40 @@
+{
+  "fixture_id": "curriculum_planning-advanced_rust",
+  "description": "Curriculum for an experienced C++ developer learning Rust",
+  "prompt_name": "curriculum_planning",
+  "prompt_version": 1,
+  "target_schema": "curriculum_plan.v1.schema.json",
+  "input": {
+    "learning_goal": "Master Rust for high-performance systems programming",
+    "user_profile": "{\"experience_level\":{\"domain_knowledge\":\"advanced\",\"years_of_experience\":5},\"learning_style\":{\"preferred_format\":[\"project-based\",\"text\"],\"pace_preference\":\"fast_paced\"},\"available_time\":{\"hours_per_week\":15}}"
+  },
+  "expected_output": {
+    "title": "Rust for Systems Programmers",
+    "description": "An accelerated Rust curriculum for experienced C++ developers",
+    "chapters": [
+      {
+        "id": "ownership-borrowing",
+        "title": "Ownership and Borrowing Deep Dive",
+        "order": 1,
+        "objectives": ["Master ownership rules", "Understand borrowing vs references", "Work with lifetimes"],
+        "estimated_minutes": 60,
+        "prerequisites": []
+      },
+      {
+        "id": "concurrency",
+        "title": "Fearless Concurrency",
+        "order": 2,
+        "objectives": ["Use threads and channels", "Understand Send and Sync", "Build concurrent data structures"],
+        "estimated_minutes": 90,
+        "prerequisites": ["ownership-borrowing"]
+      }
+    ],
+    "estimated_duration": "4-5 weeks",
+    "prerequisites_summary": ["C++ proficiency", "Understanding of memory management"],
+    "learning_objectives": ["Write safe concurrent Rust", "Build high-performance systems", "Integrate Rust with existing C++ codebases"]
+  },
+  "semantic_checks": [],
+  "captured_from": null,
+  "captured_at": null,
+  "last_passed": null
+}

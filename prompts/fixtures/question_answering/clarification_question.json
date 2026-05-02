@@ -1,0 +1,26 @@
+{
+  "fixture_id": "question_answering-clarification_question",
+  "description": "Answer a clarification follow-up question with conversation history",
+  "prompt_name": "question_answering",
+  "prompt_version": 1,
+  "target_schema": "message.v1.schema.json",
+  "input": {
+    "question": "Can you explain that with a code example?",
+    "user_profile": "{\"experience_level\":{\"domain_knowledge\":\"beginner\"},\"learning_style\":{\"preferred_format\":[\"text\",\"interactive\"]},\"available_time\":{\"hours_per_week\":5}}",
+    "chapter_content": "Lists in Python store ordered collections of items. A for loop iterates through each item in a list.",
+    "conversation_history": "[{\"role\":\"user\",\"content\":\"What is a for loop?\"},{\"role\":\"assistant\",\"content\":\"A for loop lets you repeat code for each item in a collection.\"}]",
+    "curriculum_context": "{\"title\":\"Python Fundamentals\"}"
+  },
+  "expected_output": {
+    "id": "550e8400-e29b-41d4-a716-446655440001",
+    "role": "assistant",
+    "content": "Here's a concrete code example of a for loop iterating through a list:\n\n```python\nfruits = [\"apple\", \"banana\", \"cherry\"]\nfor fruit in fruits:\n    print(f\"I like {fruit}\")\n```\n\nThis prints each fruit name, demonstrating how the for loop processes each item in the list one at a time.",
+    "timestamp": "2025-01-15T10:31:00Z",
+    "chapter_id": "python-basics",
+    "content_type": "example"
+  },
+  "semantic_checks": [],
+  "captured_from": null,
+  "captured_at": null,
+  "last_passed": null
+}

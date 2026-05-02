@@ -53,7 +53,7 @@ impl ContainerExecutor {
 
         // Image and command
         cmd.arg(image);
-        cmd.args(["sh", "-c", &request.code]);
+        cmd.arg(&request.code);
 
         // Execute with timeout
         let start = std::time::Instant::now();

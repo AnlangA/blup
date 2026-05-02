@@ -1,0 +1,40 @@
+name: sandbox-rust
+description: Rust compilation and execution sandbox for coding exercises
+version: 1
+dockerfile: sandboxes/docker/Dockerfile.rust
+
+base_image:
+  name: rust:1.83-slim
+  digest: sha256:rust-1.83
+
+pinned_packages: []
+
+build_args:
+  USER_ID: "1000"
+  USER_NAME: sandbox
+
+security:
+  seccomp_profile: sandboxes/policies/seccomp-python.json
+  read_only_rootfs: true
+  no_new_privileges: true
+  cap_drop: ["ALL"]
+
+limits:
+  compile_timeout_secs: 60
+  run_timeout_secs: 10
+  memory_mb: 1024
+  cpu_count: 1
+  disk_mb: 500
+  max_processes: 10
+  network_enabled: false
+
+tests:
+  - name: rust_version
+    command: ["rustc", "--version"]
+    expected_output: "rustc 1."
+  - name: compile_and_run
+    command: ["sh", "-c", "echo 'fn main() { println!(\"hello\"); }' > /tmp/test.rs && rustc /tmp/test.rs -o /tmp/test && /tmp/test"]
+    expected_output: "hello"
+  - name: network_blocked
+    command: ["sh", "-c", "timeout 5 curl -s http://example.com 2>/dev/null && echo 'NETWORK_ACCESSIBLE' || echo 'NETWORK_BLOCKED'"]
+    expected_output: "NETWORK_BLOCKED"

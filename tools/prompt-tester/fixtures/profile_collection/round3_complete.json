@@ -1,0 +1,43 @@
+{
+  "fixture_id": "profile_collection-round3_complete",
+  "description": "Final round generates a complete user profile",
+  "prompt_name": "profile_collection",
+  "prompt_version": 1,
+  "target_schema": "user_profile.v1.schema.json",
+  "input": {
+    "learning_goal": "Learn Rust for systems programming",
+    "domain": "programming",
+    "answer": "I have 3 years of C++ experience and learn best through hands-on projects. I can dedicate 10 hours per week.",
+    "round": "3",
+    "is_final": "true"
+  },
+  "expected_output": {
+    "experience_level": {
+      "domain_knowledge": "intermediate",
+      "related_domains": ["c++", "systems programming"],
+      "years_of_experience": 3
+    },
+    "learning_style": {
+      "preferred_format": ["exercise-based", "project-based", "text"],
+      "pace_preference": "fast_paced"
+    },
+    "available_time": {
+      "hours_per_week": 10,
+      "preferred_session_length_minutes": 60
+    },
+    "goals": {
+      "primary_goal": "Build a command-line tool in Rust",
+      "secondary_goals": ["Understand ownership system"],
+      "success_criteria": "Write a multi-threaded file processor"
+    },
+    "preferences": {
+      "language": "en",
+      "difficulty_bias": "challenging",
+      "feedback_frequency": "end_of_section"
+    }
+  },
+  "semantic_checks": [],
+  "captured_from": null,
+  "captured_at": null,
+  "last_passed": null
+}

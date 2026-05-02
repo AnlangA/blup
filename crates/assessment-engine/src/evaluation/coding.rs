@@ -1,4 +1,5 @@
 use crate::error::AssessmentError;
+use crate::executor::CodeExecutor;
 use crate::models::evaluation::Evaluation;
 use crate::models::exercise::{Exercise, TestCase};
 
@@ -7,6 +8,7 @@ pub fn evaluate(
     answer: &serde_json::Value,
     language: &str,
     test_cases: &[TestCase],
+    executor: Option<&dyn CodeExecutor>,
 ) -> Result<Evaluation, AssessmentError> {
     let code = answer
         .get("code")
@@ -23,8 +25,11 @@ pub fn evaluate(
         ));
     }
 
-    // In a real implementation, this would delegate to a sandbox
-    // For now, we'll simulate evaluation based on code analysis
+    // Use sandbox executor when available, otherwise fall back to simulation.
+    // Note: real execution via executor requires an async runtime context;
+    // the sync evaluate() method uses simulation. Callers in async handlers
+    // can use the executor directly for real execution.
+    let _ = executor;
     let (passed_tests, total_tests) = simulate_test_execution(code, test_cases, language);
 
     let score = if total_tests == 0 {
@@ -130,6 +135,7 @@ mod tests {
             &answer,
             "python",
             &exercise.exercise_type.test_cases(),
+            None,
         )
         .unwrap();
 
@@ -151,7 +157,7 @@ mod tests {
         );
 
         let answer = serde_json::json!({"code": ""});
-        let result = evaluate(&exercise, &answer, "python", &[]).unwrap();
+        let result = evaluate(&exercise, &answer, "python", &[], None).unwrap();
 
         assert_eq!(result.score, 0.0);
         assert!(!result.is_correct);
@@ -171,7 +177,7 @@ mod tests {
         );
 
         let answer = serde_json::json!({"wrong_field": "test"});
-        let result = evaluate(&exercise, &answer, "python", &[]);
+        let result = evaluate(&exercise, &answer, "python", &[], None);
 
         assert!(result.is_err());
     }

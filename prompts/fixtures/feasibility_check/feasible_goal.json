@@ -1,0 +1,25 @@
+{
+  "fixture_id": "feasibility_check-feasible_goal",
+  "description": "A well-scoped programming goal should be evaluated as feasible",
+  "prompt_name": "feasibility_check",
+  "prompt_version": 1,
+  "target_schema": "feasibility_result.v1.schema.json",
+  "input": {
+    "learning_goal": "I want to learn Python for data analysis with pandas and matplotlib",
+    "domain": "programming",
+    "context": "I work with Excel spreadsheets daily and want to automate my analysis workflows"
+  },
+  "expected_output": {
+    "feasible": true,
+    "reason": "Python data analysis with pandas is a well-scoped, commonly taught topic with clear progression. The learner's Excel background provides relevant context.",
+    "suggestions": [],
+    "estimated_duration": "4-6 weeks",
+    "prerequisites": ["basic computer literacy", "understanding of tabular data"]
+  },
+  "semantic_checks": [
+    {"rule": "estimated_duration_format", "description": "Duration should be in format like 'N-N weeks'"}
+  ],
+  "captured_from": null,
+  "captured_at": null,
+  "last_passed": null
+}

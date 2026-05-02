@@ -1,14 +1,11 @@
-FROM python:3.12-slim
+FROM python:3.12-alpine
 
 # Create sandbox user
-RUN useradd -m -u 1000 sandbox
+RUN adduser -D -u 1000 sandbox
 
-# Install common packages for data analysis
+# Install common packages for data analysis (lightweight only)
 RUN pip install --no-cache-dir \
-    sympy==1.12.1 \
-    numpy==1.26.4 \
-    scipy==1.12.0 \
-    matplotlib==3.8.3
+    sympy==1.12.1
 
 # Switch to sandbox user
 USER sandbox

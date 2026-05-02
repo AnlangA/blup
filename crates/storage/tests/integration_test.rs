@@ -249,3 +249,284 @@ async fn test_delete_nonexistent_session_is_error() {
     let result = storage.delete_session(uuid::Uuid::new_v4()).await;
     assert!(result.is_err());
 }
+
+#[tokio::test]
+async fn test_backup_and_restore() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db");
+    let backup_path = tmp.path().join("backup.db");
+
+    // Create and populate a database
+    let config = StorageConfig::sqlite(&db_path.to_string_lossy());
+    let storage = Storage::connect(config.clone()).await.unwrap();
+    storage.run_migrations().await.unwrap();
+
+    let session = storage.create_session().await.unwrap();
+    let sid = uuid::Uuid::parse_str(&session.id).unwrap();
+    storage
+        .save_goal(
+            sid,
+            serde_json::json!({"description":"Learn Rust","domain":"programming"}),
+        )
+        .await
+        .unwrap();
+    storage
+        .update_session_state(sid, "GOAL_INPUT")
+        .await
+        .unwrap();
+
+    // Backup
+    storage
+        .backup(&backup_path.to_string_lossy())
+        .await
+        .unwrap();
+    assert!(backup_path.exists());
+
+    // Restore into a new database
+    let restored = Storage::restore(&config, &backup_path.to_string_lossy())
+        .await
+        .unwrap();
+    restored.run_migrations().await.unwrap();
+
+    let sessions = restored.list_sessions().await.unwrap();
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].state, "GOAL_INPUT");
+    assert!(sessions[0].goal.is_some());
+}
+
+// ── Phase 2: Additional concurrent and edge case tests ──
+
+#[tokio::test]
+async fn test_concurrent_session_creation() {
+    let storage = Storage::connect(memory_config()).await.unwrap();
+    storage.run_migrations().await.unwrap();
+
+    let mut handles = vec![];
+    for _ in 0..10 {
+        let storage_clone = storage.clone();
+        handles.push(tokio::spawn(async move {
+            storage_clone.create_session().await.unwrap()
+        }));
+    }
+
+    let mut sessions = vec![];
+    for handle in handles {
+        sessions.push(handle.await.unwrap());
+    }
+
+    // All sessions should have unique IDs
+    let mut ids: Vec<String> = sessions.iter().map(|s| s.id.clone()).collect();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), 10);
+}
+
+#[tokio::test]
+async fn test_concurrent_message_writes() {
+    let storage = Storage::connect(memory_config()).await.unwrap();
+    storage.run_migrations().await.unwrap();
+
+    let session = storage.create_session().await.unwrap();
+    let sid = uuid::Uuid::parse_str(&session.id).unwrap();
+
+    let mut handles = vec![];
+    for i in 0..5 {
+        let storage_clone = storage.clone();
+        handles.push(tokio::spawn(async move {
+            storage_clone
+                .save_message(sid, Some("ch1"), "user", &format!("Message {i}"))
+                .await
+                .unwrap()
+        }));
+    }
+
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    let messages = storage.get_messages(sid, 10, None).await.unwrap();
+    assert_eq!(messages.len(), 5);
+}
+
+#[tokio::test]
+async fn test_concurrent_progress_updates() {
+    let storage = Storage::connect(memory_config()).await.unwrap();
+    storage.run_migrations().await.unwrap();
+
+    let session = storage.create_session().await.unwrap();
+    let sid = uuid::Uuid::parse_str(&session.id).unwrap();
+
+    let mut handles = vec![];
+    for i in 0..5 {
+        let storage_clone = storage.clone();
+        handles.push(tokio::spawn(async move {
+            let progress = serde_json::json!({
+                "status": "in_progress",
+                "completion": (i as f64 * 20.0),
+                "time_spent_minutes": i * 10
+            });
+            storage_clone
+                .upsert_progress(sid, &format!("ch{}", i), progress)
+                .await
+                .unwrap()
+        }));
+    }
+
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    let all_progress = storage.get_all_progress(sid).await.unwrap();
+    assert_eq!(all_progress.len(), 5);
+}
+
+#[tokio::test]
+async fn test_large_message_content() {
+    let storage = Storage::connect(memory_config()).await.unwrap();
+    storage.run_migrations().await.unwrap();
+
+    let session = storage.create_session().await.unwrap();
+    let sid = uuid::Uuid::parse_str(&session.id).unwrap();
+
+    // 100KB message
+    let large_content = "x".repeat(100 * 1024);
+    storage
+        .save_message(sid, Some("ch1"), "assistant", &large_content)
+        .await
+        .unwrap();
+
+    let messages = storage.get_messages(sid, 1, None).await.unwrap();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0]["content"], large_content);
+}
+
+#[tokio::test]
+async fn test_session_state_transitions() {
+    let storage = Storage::connect(memory_config()).await.unwrap();
+    storage.run_migrations().await.unwrap();
+
+    let session = storage.create_session().await.unwrap();
+    let sid = uuid::Uuid::parse_str(&session.id).unwrap();
+
+    let states = vec![
+        "GOAL_INPUT",
+        "FEASIBILITY_CHECK",
+        "PROFILE_COLLECTION",
+        "CURRICULUM_PLANNING",
+        "CHAPTER_LEARNING",
+        "COMPLETED",
+    ];
+
+    for state in states {
+        storage.update_session_state(sid, state).await.unwrap();
+        let retrieved = storage.get_session(sid).await.unwrap().unwrap();
+        assert_eq!(retrieved.state, state);
+    }
+}
+
+#[tokio::test]
+async fn test_curriculum_with_nested_data() {
+    let storage = Storage::connect(memory_config()).await.unwrap();
+    storage.run_migrations().await.unwrap();
+
+    let session = storage.create_session().await.unwrap();
+    let sid = uuid::Uuid::parse_str(&session.id).unwrap();
+
+    let curriculum = serde_json::json!({
+        "title": "Advanced Rust",
+        "description": "Deep dive into Rust",
+        "chapters": [
+            {
+                "id": "ch1",
+                "title": "Ownership",
+                "order": 1,
+                "objectives": ["Understand ownership", "Learn borrowing"],
+                "content": "# Ownership\n\nRust's ownership system...",
+                "exercises": [
+                    {"type": "multiple_choice", "question": "What is ownership?"},
+                    {"type": "coding", "question": "Fix the code"}
+                ]
+            },
+            {
+                "id": "ch2",
+                "title": "Lifetimes",
+                "order": 2,
+                "objectives": ["Understand lifetimes"],
+                "prerequisites": ["ch1"]
+            }
+        ],
+        "metadata": {
+            "difficulty": "advanced",
+            "estimated_hours": 40
+        }
+    });
+
+    storage
+        .save_curriculum(sid, curriculum.clone())
+        .await
+        .unwrap();
+
+    let retrieved = storage.get_curriculum(sid).await.unwrap().unwrap();
+    assert_eq!(retrieved["title"], "Advanced Rust");
+    assert_eq!(retrieved["chapters"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn test_assessment_with_complex_evaluation() {
+    let storage = Storage::connect(memory_config()).await.unwrap();
+    storage.run_migrations().await.unwrap();
+
+    let session = storage.create_session().await.unwrap();
+    let sid = uuid::Uuid::parse_str(&session.id).unwrap();
+
+    let input = storage::models::assessment::AssessmentInput {
+        exercise: serde_json::json!({
+            "id": "ex1",
+            "type": "coding",
+            "language": "python",
+            "test_cases": [
+                {"input": "2,3", "expected": "5"},
+                {"input": "0,0", "expected": "0"}
+            ]
+        }),
+        answer: Some(serde_json::json!({
+            "code": "def add(a, b): return a + b"
+        })),
+        evaluation: Some(serde_json::json!({
+            "score": 2.0,
+            "max_score": 2.0,
+            "feedback": "All tests passed",
+            "test_results": [
+                {"name": "test1", "passed": true},
+                {"name": "test2", "passed": true}
+            ]
+        })),
+        score: Some(2.0),
+        max_score: Some(2.0),
+    };
+
+    storage
+        .save_assessment(sid, Some("ch1"), &input)
+        .await
+        .unwrap();
+
+    let assessments = storage.get_assessments(sid).await.unwrap();
+    assert_eq!(assessments.len(), 1);
+    assert_eq!(assessments[0]["score"], 2.0);
+}
+
+#[tokio::test]
+async fn test_rollback_multiple_steps() {
+    let storage = Storage::connect(memory_config()).await.unwrap();
+    storage.run_migrations().await.unwrap();
+
+    // Rollback all 5 migrations
+    storage.rollback(5).await.unwrap();
+
+    // Re-migrate should work
+    storage.run_migrations().await.unwrap();
+
+    // Should be able to create sessions again
+    let session = storage.create_session().await.unwrap();
+    assert_eq!(session.state, "IDLE");
+}

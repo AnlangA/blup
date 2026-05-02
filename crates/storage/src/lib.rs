@@ -36,6 +36,46 @@ impl Storage {
         connection::rollback(&self.db, steps).await
     }
 
+    /// Backup the database to a file path using SQLite VACUUM INTO.
+    pub async fn backup(&self, path: &str) -> Result<(), StorageError> {
+        let pool = self.pool();
+        let query = format!("VACUUM INTO '{}'", path.replace('\'', "''"));
+        sqlx::query(&query)
+            .execute(pool)
+            .await
+            .map_err(|e| StorageError::Connection(format!("Backup failed: {e}")))?;
+        tracing::info!(path = path, "Database backup completed");
+        Ok(())
+    }
+
+    /// Restore the database from a backup file by closing current connections
+    /// and replacing the database file. Returns a new Storage connected to the
+    /// restored database.
+    pub async fn restore(config: &StorageConfig, backup_path: &str) -> Result<Self, StorageError> {
+        if !config.is_sqlite() {
+            return Err(StorageError::UnsupportedOperation(
+                "Restore is only supported for SQLite".into(),
+            ));
+        }
+
+        let db_path = config
+            .database_url
+            .strip_prefix("sqlite:")
+            .unwrap_or(&config.database_url);
+
+        // Close existing connections by dropping any active pool, then copy
+        tokio::fs::copy(backup_path, db_path)
+            .await
+            .map_err(|e| StorageError::Connection(format!("Failed to restore from backup: {e}")))?;
+
+        tracing::info!(
+            backup = backup_path,
+            target = db_path,
+            "Database restored from backup"
+        );
+        Self::connect(config.clone()).await
+    }
+
     fn pool(&self) -> &SqlitePool {
         match &self.db {
             Database::Sqlite(pool) => pool,

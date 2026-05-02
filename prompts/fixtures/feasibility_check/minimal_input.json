@@ -1,0 +1,23 @@
+{
+  "fixture_id": "feasibility_check-minimal_input",
+  "description": "A minimal valid input with just description and domain",
+  "prompt_name": "feasibility_check",
+  "prompt_version": 1,
+  "target_schema": "feasibility_result.v1.schema.json",
+  "input": {
+    "learning_goal": "Learn Rust programming language basics",
+    "domain": "programming",
+    "context": ""
+  },
+  "expected_output": {
+    "feasible": true,
+    "reason": "Learning Rust basics is a well-defined programming goal with clear scope.",
+    "suggestions": ["Set aside time for ownership and borrowing concepts"],
+    "estimated_duration": "6-8 weeks",
+    "prerequisites": ["basic programming knowledge"]
+  },
+  "semantic_checks": [],
+  "captured_from": null,
+  "captured_at": null,
+  "last_passed": null
+}
