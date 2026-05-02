@@ -12,10 +12,12 @@
 - `bootstrap`: Verify required development tools (implemented as `scripts/bootstrap`).
 - `check`: Run all repository validators (implemented as `scripts/check`).
 
-### Future deliverables
+### Phase 2 deliverables (completed)
 
-- Prompt tester.
-- Sandbox image builder.
+- `prompt-tester`: Test prompt templates against fixtures and schema contracts (Python, in `tools/prompt-tester/`).
+- `sandbox-builder`: Build sandbox Docker images reproducibly (Rust, in `tools/sandbox-builder/`).
+
+### Future deliverables
 - Asset optimizer.
 - Plugin builder.
 - Schema generator.

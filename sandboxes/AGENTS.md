@@ -10,11 +10,14 @@
 
 None. Phase 1 does not run user code and does not require a sandbox.
 
-### Phase 2 deliverables
+### Phase 2 deliverables (completed)
 
-- Docker-based sandbox for code execution and assessment.
-- Resource limits, disabled network by default, and structured audit logs.
-- Tool request and response schemas coordinated with `schemas/` and `crates/`.
+- Docker-based sandbox for code execution and assessment (`crates/sandbox-manager`).
+- Resource limits (memory, CPU, disk, processes, timeout), disabled network by default, and structured audit logs.
+- Tool request and response schemas in `schemas/`.
+- Sandbox definitions for Python, Node.js, and Rust in `sandboxes/definitions/`.
+- Seccomp profiles and security hardening in `sandboxes/policies/`.
+- Sandbox builder tool in `tools/sandbox-builder`.
 
 ### Phase 2.5 deliverables
 

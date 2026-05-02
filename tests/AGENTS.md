@@ -17,8 +17,8 @@
 
 ### Future deliverables
 
-- Sandbox security and resource-limit tests in Phase 2.
-- Assessment engine tests in Phase 2.
+- Sandbox security and resource-limit tests in Phase 2. **Completed** (mock executor tests, integration tests for storage and assessment).
+- Assessment engine tests in Phase 2. **Completed** (all exercise types, determinism, boundary cases).
 - Import/export and Typst compilation tests in Phase 2.5.
 - Plugin contract tests in Phase 3.
 - Full E2E tests once the UI and backend are stable.

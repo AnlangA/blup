@@ -33,17 +33,21 @@ Tauri desktop shell
 
 ### Explicit Phase 1 exclusions
 
-Phase 1 must not include Tauri, Bevy, WASM plugins, Docker sandbox execution, database persistence, user authentication, payments, internationalization, or real execution of user-submitted code.
+Phase 1 must not include Tauri, Bevy, WASM plugins, Docker sandbox execution, database persistence, user authentication, payments, internationalization, or real execution of user-submitted code. All of these exclusions remain in effect unless a later phase explicitly includes them.
+
+### Explicit Phase 2 inclusions (now completed)
+
+Phase 2 introduced: `storage` crate (SQLite persistence), `assessment-engine` crate (exercise evaluation), `sandbox-manager` crate (Docker-based code execution), sandbox Docker images (Python, Node.js), prompt-tester and sandbox-builder tools, and new JSON schemas for exercises, assessment results, and sandbox requests/results.
 
 ## Delivery Phases
 
-| Phase | Goal | Main directories | Deliverable |
-| --- | --- | --- | --- |
-| Phase 0: Foundation | Make the repository buildable, checkable, and observable | root, `tools/`, `schemas/`, `docs-internal/` | bootstrap/check commands, schema validation, CI-quality policy, logging policy |
-| Phase 1: Web learning assistant MVP | Single-user web learning flow | `schemas/`, `crates/agent-core`, `prompts/`, `apps/web-ui`, `tests/` | usable web assistant: goal feasibility → profile → curriculum → chapter teaching |
-| Phase 2: Verification and persistence | Exercises, assessment, sandboxed execution, progress storage | `crates/storage`, `crates/assessment-engine`, `sandboxes/`, `tests/` | persistent learning sessions and deterministic assessment/tool results |
-| Phase 2.5: Desktop and materials workflow | Desktop packaging, imports, Typst/PDF export | `apps/desktop`, `tools/`, `crates/content-pipeline` | local desktop app, source import, learning document export |
-| Phase 3: Extensions and interactive scenes | Plugin host and Bevy scenes | `plugins/`, `crates/plugin-host`, `crates/tool-router`, `apps/bevy-viewer`, `assets/` | permissioned plugins and interactive learning scenes |
+| Phase | Status | Goal | Main directories | Deliverable |
+| --- | --- | --- | --- | --- |
+| Phase 0: Foundation | **Completed** | Make the repository buildable, checkable, and observable | root, `tools/`, `schemas/`, `docs-internal/` | bootstrap/check commands, schema validation, CI-quality policy, logging policy |
+| Phase 1: Web learning assistant MVP | **Completed** | Single-user web learning flow | `schemas/`, `crates/agent-core`, `prompts/`, `apps/web-ui`, `tests/` | usable web assistant: goal feasibility → profile → curriculum → chapter teaching |
+| Phase 2: Verification and persistence | **Completed** | Exercises, assessment, sandboxed execution, progress storage | `crates/storage`, `crates/assessment-engine`, `sandboxes/`, `tests/` | persistent learning sessions and deterministic assessment/tool results |
+| Phase 2.5: Desktop and materials workflow | Planned | Desktop packaging, imports, Typst/PDF export | `apps/desktop`, `tools/`, `crates/content-pipeline` | local desktop app, source import, learning document export |
+| Phase 3: Extensions and interactive scenes | Planned | Plugin host and Bevy scenes | `plugins/`, `crates/plugin-host`, `crates/tool-router`, `apps/bevy-viewer`, `assets/` | permissioned plugins and interactive learning scenes |
 
 Each phase must produce a runnable, demonstrable product slice. Do not deliver only framework code or disconnected infrastructure.
 
@@ -114,7 +118,7 @@ Any state may transition to `ERROR`. `ERROR` may retry the previous state or res
 Rules:
 
 - A session has exactly one active state transition at a time.
-- Phase 1 may store state in memory or JSON files. Phase 2 moves persistent state to SQLite or PostgreSQL.
+- Session state is persisted via the `storage` crate (SQLite by default).
 - Disconnected clients resume by `session_id`.
 - Invalid transitions must return structured errors and must be tested.
 
@@ -220,13 +224,14 @@ Import/export logs must include source type, checksum, parser status, chunk coun
 
 ```text
 schemas/          # shared protocol definitions
-crates/           # Rust services and libraries
+crates/           # Rust services and libraries (agent-core, storage, assessment-engine, sandbox-manager, blup-agent)
 prompts/          # versioned LLM prompt templates
 apps/             # user-facing applications
-sandboxes/        # isolated execution environments, Phase 2+
+sandboxes/        # isolated execution environments (Docker images, definitions, policies)
 plugins/          # permissioned learning extensions, Phase 3+
 tests/            # integration, contract, E2E, and security tests
-tools/            # validation, bootstrap, import/export, and developer tooling
+tools/            # validation, bootstrap, prompt-tester, sandbox-builder, and developer tooling
+services/         # external services (LLM gateway)
 assets/           # fonts, icons, scene assets, and licensed learning assets
 docs-internal/    # ADRs, threat models, research notes, experiments
 ```

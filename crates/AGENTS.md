@@ -6,7 +6,7 @@
 
 ## Scope
 
-### Phase 1 deliverables
+### Phase 1 deliverables (completed)
 
 - `crates/agent-core`: a single Rust crate containing:
   - Axum HTTP service.
@@ -16,12 +16,18 @@
   - Schema validation for structured LLM output and API payloads.
   - Structured logging with `tracing`.
 
-### Not in Phase 1
+### Phase 2 deliverables (completed)
 
-- `storage` persistent database crate.
-- `assessment-engine` crate.
-- `llm-gateway` split-out crate.
-- `tool-router`, `plugin-host`, or `bevy-protocol` crates.
+- `crates/storage`: persistent storage crate with SQLite, SQLx migrations, backup/restore.
+- `crates/assessment-engine`: exercise generation and deterministic evaluation (multiple choice, short answer, coding, reflection).
+- `crates/sandbox-manager`: Docker-based sandboxed code execution with resource limits and mock executor support.
+- `crates/blup-agent`: agent abstraction layer.
+
+### Not yet in scope
+
+- `llm-gateway` split-out Rust crate (currently a Python service at `services/llm-gateway/`).
+- `tool-router`, `plugin-host`, or `bevy-protocol` crates (Phase 3).
+- `content-pipeline` crate (Phase 2.5).
 - Host execution of user-submitted code.
 
 ## Module Responsibilities
@@ -33,8 +39,8 @@
 
 ## Implementation Plan by Phase
 
-- Phase 1: single `agent-core` crate for fast iteration.
-- Phase 2: split `storage`, `assessment-engine`, and `llm-gateway` when persistence and assessments become real.
+- Phase 1: single `agent-core` crate for fast iteration. **Completed.**
+- Phase 2: split `storage`, `assessment-engine`, and `sandbox-manager`. **Completed.**
 - Phase 2.5: add content/import/export pipeline crates only after file permissions and artifact rules are defined.
 - Phase 3: add `plugin-host`, `tool-router`, and `bevy-protocol` behind explicit schemas and permission checks.
 
