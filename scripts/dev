@@ -1,13 +1,12 @@
 #!/bin/sh
 # dev — Start Blup development environment
-# Usage: ./scripts/dev [--with-gateway] [--gateway-only]
+# Usage: ./scripts/dev [--with-gateway] [--gateway-only] [--app|--desktop]
 #
 # Starts:
 #   1. llm-gateway on localhost:9000 (Python, if --with-gateway)
 #   2. agent-core on localhost:3000   (Rust)
 #   3. web-ui on localhost:5173       (Vite)
-
-set -e
+#   4. desktop app (Tauri, if --app or --desktop)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -15,11 +14,13 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 WITH_GATEWAY=false
 GATEWAY_ONLY=false
+DESKTOP=false
 
 for arg in "$@"; do
     case "$arg" in
         --with-gateway) WITH_GATEWAY=true ;;
         --gateway-only) GATEWAY_ONLY=true ;;
+        --app|--desktop) DESKTOP=true ;;
     esac
 done
 
@@ -37,22 +38,24 @@ if [ ! -f "$PROJECT_DIR/.env" ]; then
 fi
 
 # Load .env into environment
-info "Loading .env..."
-set -a
-. "$PROJECT_DIR/.env"
-set +a
+if [ -f "$PROJECT_DIR/.env" ]; then
+    info "Loading .env..."
+    set -a
+    . "$PROJECT_DIR/.env"
+    set +a
+fi
 
 # Validate minimum config
 if [ -z "$GATEWAY_SECRET" ]; then
-    fail "GATEWAY_SECRET is required in .env"
-    exit 1
+    export GATEWAY_SECRET="dev-secret-key"
+    warn "GATEWAY_SECRET not set, using default for development"
 fi
 
 cleanup() {
     echo ""
     echo "Shutting down..."
-    kill $BACKEND_PID $FRONTEND_PID $GATEWAY_PID 2>/dev/null || true
-    wait $BACKEND_PID $FRONTEND_PID $GATEWAY_PID 2>/dev/null || true
+    kill $BACKEND_PID $FRONTEND_PID $GATEWAY_PID $DESKTOP_PID 2>/dev/null || true
+    wait $BACKEND_PID $FRONTEND_PID $GATEWAY_PID $DESKTOP_PID 2>/dev/null || true
     echo "All services stopped."
 }
 trap cleanup EXIT INT TERM
@@ -62,10 +65,7 @@ if $WITH_GATEWAY || $GATEWAY_ONLY; then
     echo ""
     echo "--- LLM Gateway ---"
 
-    # Kill old gateway if still running
     lsof -ti:9000 2>/dev/null | xargs kill 2>/dev/null || true
-
-    # Unset proxy vars so httpx doesn't try to use a SOCKS proxy
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy 2>/dev/null || true
 
     GATEWAY_DIR="$PROJECT_DIR/services/llm-gateway"
@@ -87,7 +87,6 @@ if $WITH_GATEWAY || $GATEWAY_ONLY; then
     GATEWAY_PID=$!
     cd "$PROJECT_DIR"
 
-    # Wait for gateway to be ready
     info "Waiting for llm-gateway..."
     for i in $(seq 1 20); do
         if curl -s http://localhost:9000/health >/dev/null 2>&1; then
@@ -114,7 +113,6 @@ fi
 echo ""
 echo "--- Agent Core ---"
 
-# Kill old backend if still running
 lsof -ti:3000 2>/dev/null | xargs kill 2>/dev/null || true
 
 info "Building and starting agent-core..."
@@ -122,7 +120,6 @@ cd "$PROJECT_DIR"
 cargo run -p agent-core &
 BACKEND_PID=$!
 
-# Wait for backend to be ready
 info "Waiting for agent-core..."
 for i in $(seq 1 30); do
     if curl -s http://localhost:3000/health >/dev/null 2>&1; then
@@ -140,10 +137,10 @@ done
 echo ""
 echo "--- Web UI ---"
 
-# Kill old frontend if still running
 lsof -ti:5173 2>/dev/null | xargs kill 2>/dev/null || true
+lsof -ti:5174 2>/dev/null | xargs kill 2>/dev/null || true
+lsof -ti:5175 2>/dev/null | xargs kill 2>/dev/null || true
 
-# Check node_modules
 if [ ! -d "$PROJECT_DIR/apps/web-ui/node_modules" ]; then
     info "Installing npm dependencies..."
     cd "$PROJECT_DIR/apps/web-ui"
@@ -157,6 +154,9 @@ npm run dev &
 FRONTEND_PID=$!
 cd "$PROJECT_DIR"
 
+# Give web-ui time to start
+sleep 5
+
 echo ""
 echo "================================================"
 echo "  Backend:     http://localhost:3000"
@@ -165,6 +165,36 @@ if $WITH_GATEWAY; then
     echo "  LLM Gateway: http://localhost:9000"
 fi
 echo "================================================"
+
+# ---- 4. Desktop App (Tauri) ----
+if $DESKTOP; then
+    echo ""
+    echo "--- Desktop App ---"
+
+    if ! command -v cargo-tauri >/dev/null 2>&1; then
+        info "Installing Tauri CLI..."
+        cargo install tauri-cli --version "^2"
+    fi
+
+    # Tauri needs the web-ui dev server running
+    info "Starting desktop app (wrapping web-ui)..."
+    cd "$PROJECT_DIR/apps/desktop/src-tauri"
+    # Suppress harmless macOS WebKit logs (TSM AdjustCapsLockLED, IMKCFRunLoopWakeUpReliable)
+    export OS_ACTIVITY_MODE=disable
+    cargo tauri dev &
+    DESKTOP_PID=$!
+    unset OS_ACTIVITY_MODE
+    cd "$PROJECT_DIR"
+    echo "  Desktop:     Tauri app starting..."
+    echo ""
+    echo "================================================"
+    echo "  Desktop App: Tauri native window"
+    echo "  Backend:     http://localhost:3000"
+    echo "  LLM Gateway: http://localhost:9000 (if started)"
+    echo "================================================"
+fi
+
+echo ""
 echo "Press Ctrl+C to stop all services."
 echo ""
 

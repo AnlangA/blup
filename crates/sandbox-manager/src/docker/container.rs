@@ -25,9 +25,9 @@ impl ContainerExecutor {
             request.limits.compile_timeout_secs + request.limits.run_timeout_secs,
         );
 
-        // Build docker run command
+        // Build docker run command (without --rm so we can inspect after exit)
         let mut cmd = Command::new("docker");
-        cmd.args(["run", "--rm"])
+        cmd.args(["run"])
             .args(["--name", &container_name])
             .args(["--memory", &format!("{}m", request.limits.memory_mb)])
             .args(["--cpus", &format!("{}", request.limits.cpu_count)])
@@ -71,25 +71,126 @@ impl ContainerExecutor {
 
         match result {
             Ok(Ok(output)) => {
+                let duration_ms = start.elapsed().as_millis() as u64;
+
+                // Inspect container to capture resource usage before removing
+                let resource_usage = self.inspect_container(&container_name);
+
                 // Clean up container
                 self.force_remove_container(&container_name);
 
-                // Parse output with measured duration
-                let duration_ms = start.elapsed().as_millis() as u64;
-                self.parse_output(request.request_id, output, &request, duration_ms)
+                self.parse_output(
+                    request.request_id,
+                    output,
+                    &request,
+                    duration_ms,
+                    resource_usage,
+                )
             }
             Ok(Err(e)) => {
                 self.force_remove_container(&container_name);
                 Err(e)
             }
             Err(_elapsed) => {
-                // Timeout - force kill container
-                self.force_kill_container(&container_name);
-                Ok(SandboxResult::timeout(
-                    request.request_id,
-                    total_timeout.as_millis() as u64,
-                ))
+                // Timeout - force kill, then inspect before removing
+                let _ = Command::new("docker")
+                    .args(["kill", "--signal=SIGKILL", &container_name])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status();
+
+                std::thread::sleep(Duration::from_millis(500));
+
+                let resource_usage = self.inspect_container(&container_name);
+                self.force_remove_container(&container_name);
+
+                Ok(SandboxResult {
+                    request_id: request.request_id,
+                    session_id: Some(request.session_id),
+                    status: ExecutionStatus::TimeoutRun,
+                    exit_code: None,
+                    stdout: String::new(),
+                    stderr: "Execution timed out".to_string(),
+                    stdout_truncated: false,
+                    stderr_truncated: false,
+                    duration_ms: total_timeout.as_millis() as u64,
+                    resource_usage,
+                    error: Some(crate::models::result::ErrorDetails {
+                        code: "TIMEOUT".to_string(),
+                        message: "Execution timed out".to_string(),
+                    }),
+                })
             }
+        }
+    }
+
+    /// Inspect a container with `docker inspect` to extract resource usage metrics.
+    fn inspect_container(&self, name: &str) -> ResourceUsage {
+        // Safely read OOMKilled from docker inspect
+        let _oom_killed = Command::new("docker")
+            .args(["inspect", "--format", "{{json .State}}", name])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+            .and_then(|v| v.get("OOMKilled").and_then(|v| v.as_bool()))
+            .unwrap_or(false);
+
+        // Try to get memory stats from docker stats (one-shot)
+        let stats = Command::new("docker")
+            .args(["stats", "--no-stream", "--format", "{{json .}}", name])
+            .output();
+
+        let (peak_memory_mb, cpu_time_ms) = stats
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+            .map(|v| {
+                let mem_str = v
+                    .get("MemUsage")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("0MiB / 0MiB");
+                // Parse "12.5MiB / 256MiB" → peak in MB
+                let mem_mb = mem_str
+                    .split(" / ")
+                    .next()
+                    .and_then(|used| {
+                        let used = used.trim();
+                        if used.ends_with("GiB") {
+                            used.trim_end_matches("GiB")
+                                .trim()
+                                .parse::<f64>()
+                                .ok()
+                                .map(|v| v * 1024.0)
+                        } else if used.ends_with("MiB") {
+                            used.trim_end_matches("MiB").trim().parse::<f64>().ok()
+                        } else if used.ends_with("KiB") {
+                            used.trim_end_matches("KiB")
+                                .trim()
+                                .parse::<f64>()
+                                .ok()
+                                .map(|v| v / 1024.0)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(0.0);
+
+                let cpu_str = v.get("CPUPerc").and_then(|v| v.as_str()).unwrap_or("0.00%");
+                let cpu_pct = cpu_str
+                    .trim_end_matches('%')
+                    .trim()
+                    .parse::<f64>()
+                    .unwrap_or(0.0);
+
+                (mem_mb, (cpu_pct * 10.0) as u64)
+            })
+            .unwrap_or((0.0, 0));
+
+        ResourceUsage {
+            peak_memory_mb,
+            cpu_time_ms,
+            disk_used_kb: 0,
         }
     }
 
@@ -99,6 +200,7 @@ impl ContainerExecutor {
         output: std::process::Output,
         request: &SandboxRequest,
         duration_ms: u64,
+        resource_usage: ResourceUsage,
     ) -> Result<SandboxResult, SandboxError> {
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -117,8 +219,17 @@ impl ContainerExecutor {
             (stderr, false)
         };
 
+        // Determine status: prioritize resource limit signals over exit code
         let status = match exit_code {
             Some(0) => ExecutionStatus::Success,
+            Some(137) => {
+                // SIGKILL (137 = 128 + 9) — typically OOM or timeout signal
+                if resource_usage.peak_memory_mb >= request.limits.memory_mb as f64 {
+                    ExecutionStatus::MemoryExceeded
+                } else {
+                    ExecutionStatus::NonZeroExit
+                }
+            }
             Some(_code) => ExecutionStatus::NonZeroExit,
             None => ExecutionStatus::InternalError,
         };
@@ -133,7 +244,7 @@ impl ContainerExecutor {
             stdout_truncated,
             stderr_truncated,
             duration_ms,
-            resource_usage: ResourceUsage::default(),
+            resource_usage,
             error: None,
         })
     }
@@ -144,19 +255,5 @@ impl ContainerExecutor {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
-    }
-
-    fn force_kill_container(&self, name: &str) {
-        let _ = Command::new("docker")
-            .args(["kill", "--signal=SIGKILL", name])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
-
-        // Wait briefly for the container to stop — this runs on the blocking
-        // thread pool (called from spawn_blocking) so thread::sleep is fine.
-        std::thread::sleep(Duration::from_millis(500));
-
-        self.force_remove_container(name);
     }
 }

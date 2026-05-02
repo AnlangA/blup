@@ -1,0 +1,29 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440010",
+  "source_type": "pdf",
+  "title": "Calculus Textbook Chapter 1",
+  "origin": "/home/user/documents/calculus-ch1.pdf",
+  "checksum": "sha256:a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+  "language": "en",
+  "extracted_at": "2024-01-15T11:00:00Z",
+  "metadata": {
+    "page_count": 25,
+    "word_count": 8000,
+    "character_count": 45000,
+    "extraction_method": "direct_text",
+    "extraction_confidence": 0.95,
+    "ocr_applied": false,
+    "warnings": []
+  },
+  "chunks": [
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440011",
+      "document_id": "550e8400-e29b-41d4-a716-446655440010",
+      "index": 0,
+      "content": "Chapter 1: Limits and Continuity\n\nIn this chapter, we explore the fundamental concept of limits...",
+      "heading_path": ["Chapter 1: Limits and Continuity"],
+      "token_count": 300,
+      "overlap_with_previous": false
+    }
+  ]
+}

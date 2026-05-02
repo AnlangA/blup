@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blup.dev/schemas/export_job.v1.schema.json",
+  "title": "ExportJob",
+  "type": "object",
+  "version": "1.0.0",
+  "required": [
+    "id",
+    "export_type",
+    "source_id",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique job identifier"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Associated learning session"
+    },
+    "export_type": {
+      "type": "string",
+      "enum": ["chapter", "curriculum"],
+      "description": "Type of content to export"
+    },
+    "source_id": {
+      "type": "string",
+      "maxLength": 100,
+      "description": "Chapter ID or curriculum plan ID"
+    },
+    "config": {
+      "$ref": "#/$defs/ExportConfig"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "rendering", "compiling", "completed", "failed"],
+      "description": "Current job status"
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TypstDiagnostic"
+          }
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    },
+    "result_artifact_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "ID of the exported DocumentArtifact"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ExportConfig": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "string",
+          "enum": ["chapter", "curriculum"],
+          "default": "chapter"
+        },
+        "include_toc": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include table of contents (curriculum only)"
+        },
+        "include_title_page": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include title page"
+        },
+        "compile_timeout_secs": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 300,
+          "default": 60
+        }
+      },
+      "additionalProperties": false
+    },
+    "TypstDiagnostic": {
+      "type": "object",
+      "required": [
+        "severity",
+        "message"
+      ],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning"]
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source_line": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "hint": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

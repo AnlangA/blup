@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blup.dev/schemas/import_job.v1.schema.json",
+  "title": "ImportJob",
+  "type": "object",
+  "version": "1.0.0",
+  "required": [
+    "id",
+    "source_type",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique job identifier"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Associated learning session"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": ["pdf", "markdown", "plain_text", "website"],
+      "description": "Type of source to import"
+    },
+    "source_path": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Local file path (for PDF, Markdown, text)"
+    },
+    "source_url": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2000,
+      "description": "Website URL (for website imports)"
+    },
+    "config": {
+      "$ref": "#/$defs/ImportConfig"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "extracting", "chunking", "completed", "failed"],
+      "description": "Current job status"
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    },
+    "result_document_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "ID of the imported SourceDocument"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ImportConfig": {
+      "type": "object",
+      "properties": {
+        "ocr_enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable OCR fallback for PDFs"
+        },
+        "max_chunk_size_chars": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 10000,
+          "default": 4000
+        },
+        "chunk_overlap_chars": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 200
+        },
+        "timeout_secs": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 120,
+          "default": 30
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

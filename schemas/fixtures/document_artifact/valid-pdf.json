@@ -1,0 +1,11 @@
+{
+  "id": "aa0e8400-e29b-41d4-a716-446655440000",
+  "session_id": "880e8400-e29b-41d4-a716-446655440000",
+  "format": "pdf",
+  "checksum": "sha256:abc123def4567890000000000000000000000000000000000000000000000000",
+  "size_bytes": 125000,
+  "page_count": 5,
+  "generated_at": "2024-01-15T10:30:00Z",
+  "source_content_ids": ["chapter-1-intro"],
+  "source_typst": "= Introduction\n\nThis is a sample chapter..."
+}

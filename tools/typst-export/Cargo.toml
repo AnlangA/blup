@@ -1,0 +1,17 @@
+[package]
+name = "typst-export"
+version = "0.1.0"
+edition = "2021"
+description = "Export learning content to Typst and PDF"
+
+[dependencies]
+content-pipeline = { path = "../../crates/content-pipeline" }
+sandbox-manager = { path = "../../crates/sandbox-manager" }
+
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"

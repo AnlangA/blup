@@ -1,0 +1,9 @@
+{
+  "id": "aa0e8400-e29b-41d4-a716-446655440001",
+  "format": "typst",
+  "checksum": "sha256:def4567890000000000000000000000000000000000000000000000000000000",
+  "size_bytes": 5000,
+  "generated_at": "2024-01-15T11:00:00Z",
+  "source_content_ids": ["curriculum-plan-1", "chapter-1-intro", "chapter-2-variables"],
+  "source_typst": "#let curriculum = json(\"curriculum.json\")\n\n= #curriculum.title"
+}

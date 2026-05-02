@@ -1,0 +1,13 @@
+{
+  "id": "990e8400-e29b-41d4-a716-446655440000",
+  "session_id": "880e8400-e29b-41d4-a716-446655440000",
+  "export_type": "chapter",
+  "source_id": "chapter-1-intro",
+  "config": {
+    "template": "chapter",
+    "include_title_page": true,
+    "compile_timeout_secs": 60
+  },
+  "status": "pending",
+  "created_at": "2024-01-15T10:30:00Z"
+}

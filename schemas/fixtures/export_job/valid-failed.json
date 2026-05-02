@@ -1,0 +1,22 @@
+{
+  "id": "990e8400-e29b-41d4-a716-446655440010",
+  "session_id": "880e8400-e29b-41d4-a716-446655440010",
+  "export_type": "chapter",
+  "source_id": "chapter-2-variables",
+  "status": "failed",
+  "error": {
+    "code": "COMPILATION_FAILED",
+    "message": "Typst compilation failed",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "message": "expected expression",
+        "line": 42,
+        "column": 15,
+        "source_line": "#bad_syntax[[["
+      }
+    ]
+  },
+  "created_at": "2024-01-15T11:00:00Z",
+  "completed_at": "2024-01-15T11:01:00Z"
+}

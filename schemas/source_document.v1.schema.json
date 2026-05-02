@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blup.dev/schemas/source_document.v1.schema.json",
+  "title": "SourceDocument",
+  "type": "object",
+  "version": "1.0.0",
+  "required": [
+    "id",
+    "source_type",
+    "title",
+    "origin",
+    "checksum",
+    "extracted_at",
+    "metadata",
+    "chunks"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique document identifier"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": ["pdf", "markdown", "plain_text", "website"],
+      "description": "Type of source material"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Document title extracted from content or metadata"
+    },
+    "origin": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "File path (local) or URL (website)"
+    },
+    "checksum": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 content hash for deduplication"
+    },
+    "language": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+      "maxLength": 10,
+      "description": "ISO 639-1 language code (e.g., 'en', 'zh')"
+    },
+    "license_or_usage_note": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "License or usage restrictions"
+    },
+    "extracted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the document was extracted"
+    },
+    "metadata": {
+      "$ref": "#/$defs/SourceMetadata"
+    },
+    "chunks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SourceChunk"
+      },
+      "description": "Document split into manageable chunks"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "SourceMetadata": {
+      "type": "object",
+      "required": [
+        "word_count",
+        "extraction_method"
+      ],
+      "properties": {
+        "page_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of pages (PDF only)"
+        },
+        "word_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "character_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "extraction_method": {
+          "type": "string",
+          "enum": ["direct_text", "pdftotext", "ocr", "fetch_readability", "markdown_parse", "text_read"],
+          "description": "Method used for text extraction"
+        },
+        "extraction_confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Confidence score (0.0-1.0)"
+        },
+        "ocr_applied": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether OCR was used"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "description": "Extraction warnings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SourceChunk": {
+      "type": "object",
+      "required": [
+        "id",
+        "document_id",
+        "index",
+        "content"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "document_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Chunk order index"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Chunk text content"
+        },
+        "heading_path": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": "Hierarchical heading path (e.g., ['Chapter 1', 'Section 1.1'])"
+        },
+        "token_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Estimated token count"
+        },
+        "overlap_with_previous": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this chunk overlaps with the previous one"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -206,12 +206,29 @@ async fn test_container_cleanup() {
 }
 
 // ── Tests that still require Docker ──
+// Run with: BLUP_RUN_SANDBOX_TESTS=1 cargo test -p blup-tests -- sandbox --ignored
+
+fn fixture(name: &str) -> String {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../sandboxes/tests/fixtures");
+    std::fs::read_to_string(format!("{}/{}", dir, name)).unwrap()
+}
+
+/// Check whether sandbox Docker tests should run.
+fn docker_available() -> bool {
+    std::env::var("BLUP_RUN_SANDBOX_TESTS").is_ok()
+}
+
+fn docker_manager() -> sandbox_manager::SandboxManager {
+    sandbox_manager::SandboxManager::new(sandbox_manager::SandboxConfig::default())
+}
 
 #[tokio::test]
 #[ignore = "requires Docker"]
 async fn test_docker_hello_world() {
-    let config = sandbox_manager::SandboxConfig::default();
-    let manager = sandbox_manager::SandboxManager::new(config);
+    if !docker_available() {
+        return;
+    }
+    let manager = docker_manager();
     let session_id = Uuid::new_v4();
 
     let request = SandboxRequest::new_python(session_id, "print('Hello, World!')");
@@ -220,4 +237,221 @@ async fn test_docker_hello_world() {
     assert_eq!(result.status, ExecutionStatus::Success);
     assert_eq!(result.exit_code, Some(0));
     assert!(result.stdout.contains("Hello, World!"));
+}
+
+#[tokio::test]
+#[ignore = "requires Docker"]
+async fn test_docker_syntax_error() {
+    if !docker_available() {
+        return;
+    }
+    let manager = docker_manager();
+    let session_id = Uuid::new_v4();
+
+    let code = fixture("syntax_error.py");
+    let request = SandboxRequest::new_python(session_id, &code);
+    let result = manager.execute(request).await.unwrap();
+
+    // Invalid Python should produce a non-zero exit
+    assert_ne!(result.exit_code, Some(0));
+    assert!(!result.stderr.is_empty() || result.status == ExecutionStatus::NonZeroExit);
+}
+
+#[tokio::test]
+#[ignore = "requires Docker"]
+async fn test_docker_run_timeout() {
+    if !docker_available() {
+        return;
+    }
+    let manager = docker_manager();
+    let session_id = Uuid::new_v4();
+
+    let code = fixture("infinite_loop.py");
+    let limits = SandboxLimits::default().with_timeouts(5, 3);
+    let request = SandboxRequest::new_python(session_id, &code).with_limits(limits);
+    let result = manager.execute(request).await.unwrap();
+
+    assert!(result.status.is_timeout());
+}
+
+#[tokio::test]
+#[ignore = "requires Docker"]
+async fn test_docker_memory_limit() {
+    if !docker_available() {
+        return;
+    }
+    let manager = docker_manager();
+    let session_id = Uuid::new_v4();
+
+    let code = fixture("memory_bomb.py");
+    let limits = SandboxLimits::default().with_memory(256);
+    let request = SandboxRequest::new_python(session_id, &code).with_limits(limits);
+    let result = manager.execute(request).await.unwrap();
+
+    // Should be killed by OOM or exit non-zero
+    assert!(result.status != ExecutionStatus::Success);
+}
+
+#[tokio::test]
+#[ignore = "requires Docker"]
+async fn test_docker_fork_bomb() {
+    if !docker_available() {
+        return;
+    }
+    let manager = docker_manager();
+    let session_id = Uuid::new_v4();
+
+    let code = fixture("fork_bomb.py");
+    let limits = SandboxLimits {
+        max_processes: 10,
+        ..SandboxLimits::default()
+    };
+    let request = SandboxRequest::new_python(session_id, &code).with_limits(limits);
+    let result = manager.execute(request).await.unwrap();
+
+    // Process limit should prevent fork bomb — either hits PROCESS_LIMIT_HIT or
+    // fails with a non-success status
+    let contained = result.stdout.contains("PROCESS_LIMIT_HIT")
+        || result.status != ExecutionStatus::Success
+        || result.exit_code != Some(0);
+    assert!(contained);
+}
+
+#[tokio::test]
+#[ignore = "requires Docker"]
+async fn test_docker_network_disabled() {
+    if !docker_available() {
+        return;
+    }
+    let manager = docker_manager();
+    let session_id = Uuid::new_v4();
+
+    let code = fixture("network_request.py");
+    let limits = SandboxLimits::default().with_network(false);
+    let request = SandboxRequest::new_python(session_id, &code).with_limits(limits);
+    let result = manager.execute(request).await.unwrap();
+
+    assert!(
+        result.stdout.contains("NETWORK_BLOCKED"),
+        "Expected NETWORK_BLOCKED, got stdout: {}",
+        result.stdout
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires Docker"]
+async fn test_docker_disk_limit() {
+    if !docker_available() {
+        return;
+    }
+    let manager = docker_manager();
+    let session_id = Uuid::new_v4();
+
+    let code = fixture("disk_fill.py");
+    let limits = SandboxLimits {
+        disk_mb: 100,
+        ..SandboxLimits::default()
+    };
+    let request = SandboxRequest::new_python(session_id, &code).with_limits(limits);
+    let result = manager.execute(request).await.unwrap();
+
+    // Should either fail with disk error or hit a limit
+    let contained = result.stdout.contains("DISK_WRITE_FAILED")
+        || result.status != ExecutionStatus::Success
+        || result.exit_code != Some(0);
+    assert!(contained);
+}
+
+#[tokio::test]
+#[ignore = "requires Docker"]
+async fn test_docker_container_cleanup_after_success() {
+    if !docker_available() {
+        return;
+    }
+    let manager = docker_manager();
+    let session_id = Uuid::new_v4();
+
+    // Count containers before
+    let before = std::process::Command::new("docker")
+        .args(["ps", "-q"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().count())
+        .unwrap_or(0);
+
+    let request = SandboxRequest::new_python(session_id, "print('cleanup test')");
+    let result = manager.execute(request).await.unwrap();
+    assert_eq!(result.status, ExecutionStatus::Success);
+
+    // Give Docker a moment to remove the container
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    let after = std::process::Command::new("docker")
+        .args(["ps", "-q"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().count())
+        .unwrap_or(0);
+
+    assert_eq!(
+        before, after,
+        "Container leaked: {before} containers before, {after} after"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires Docker"]
+async fn test_docker_container_cleanup_after_timeout() {
+    if !docker_available() {
+        return;
+    }
+    let manager = docker_manager();
+    let session_id = Uuid::new_v4();
+
+    let before = std::process::Command::new("docker")
+        .args(["ps", "-q"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().count())
+        .unwrap_or(0);
+
+    let code = "while True: pass";
+    let limits = SandboxLimits::default().with_timeouts(3, 2);
+    let request = SandboxRequest::new_python(session_id, code).with_limits(limits);
+    let result = manager.execute(request).await.unwrap();
+    assert!(result.status.is_timeout());
+
+    // Give Docker a moment to kill and remove the container
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+
+    let after = std::process::Command::new("docker")
+        .args(["ps", "-q"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().count())
+        .unwrap_or(0);
+
+    // Allow +1 since other containers might have started in between
+    assert!(
+        after <= before + 1,
+        "Container leaked after timeout: {before} containers before, {after} after"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires Docker"]
+async fn test_docker_network_enabled() {
+    if !docker_available() {
+        return;
+    }
+    let manager = docker_manager();
+    let session_id = Uuid::new_v4();
+
+    let code = fixture("network_request.py");
+    let limits = SandboxLimits::default().with_network(true);
+    let request = SandboxRequest::new_python(session_id, &code).with_limits(limits);
+    let result = manager.execute(request).await.unwrap();
+
+    // With network enabled, should reach example.com
+    assert!(
+        result.stdout.contains("NETWORK_ACCESSIBLE"),
+        "Expected NETWORK_ACCESSIBLE with network enabled, got: {}",
+        result.stdout
+    );
 }

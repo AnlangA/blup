@@ -1,0 +1,8 @@
+{
+  "id": "invalid",
+  "format": "unknown",
+  "checksum": "bad-checksum",
+  "size_bytes": -1,
+  "generated_at": "not-a-date",
+  "source_content_ids": "not-an-array"
+}

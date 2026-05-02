@@ -1,0 +1,60 @@
+[package]
+name = "content-pipeline"
+version = "0.1.0"
+edition = "2021"
+description = "Content import/export pipeline for Blup learning platform"
+
+[dependencies]
+# Internal
+storage = { path = "../storage" }
+sandbox-manager = { path = "../sandbox-manager" }
+
+# PDF extraction
+pdf-extract = "0.7"
+
+# Markdown parsing
+pulldown-cmark = "0.11"
+
+# HTTP client (website import)
+reqwest = { version = "0.12", features = ["json"] }
+
+# HTML parsing (website import)
+scraper = "0.19"
+
+# Content hashing
+sha2 = "0.10"
+hex = "0.4"
+
+# URL parsing
+url = "2"
+
+# Regex
+regex = "1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Async
+tokio = { version = "1", features = ["fs", "process", "io-util"] }
+async-trait = "0.1"
+
+# Error handling
+thiserror = "1"
+
+# Logging
+tracing = "0.1"
+
+# UUID
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Encoding detection
+encoding_rs = "0.8"
+
+# Base64 (for sandbox communication)
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"
+tokio-test = "0.4"

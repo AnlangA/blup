@@ -1,0 +1,49 @@
+name: sandbox-typst
+description: Typst compilation sandbox for PDF export
+dockerfile: sandboxes/docker/Dockerfile.typst
+version: 1
+
+# Pinned base image
+base_image:
+  name: alpine:3.19
+  digest: sha256:placeholder  # Verified at build time
+
+# Pinned package versions
+pinned_packages:
+  - typst=0.11.0
+  - font-inter=4.0
+  - font-noto=2023.08
+
+# Build arguments
+build_args:
+  USER_ID: "1000"
+  USER_NAME: sandbox
+
+# Security hardening
+security:
+  seccomp_profile: sandboxes/policies/seccomp-typst.json
+  read_only_rootfs: true
+  no_new_privileges: true
+  cap_drop: ["ALL"]
+
+# Execution limits
+limits:
+  compile_timeout_secs: 60
+  run_timeout_secs: 10
+  memory_mb: 1024
+  cpu_count: 1
+  disk_mb: 200
+  max_processes: 10
+  network_enabled: false
+
+# Test cases for image verification
+tests:
+  - name: typst_version
+    command: ["typst", "--version"]
+    expected_output: "typst"
+  - name: typst_compile
+    command: ["sh", "-c", "echo '= Hello' > /tmp/test.typ && typst compile /tmp/test.typ /tmp/test.pdf && ls -la /tmp/test.pdf"]
+    expected_exit_code: 0
+  - name: network_blocked
+    command: ["wget", "http://example.com", "-O", "/dev/null", "--timeout=5"]
+    expected_exit_code: 1

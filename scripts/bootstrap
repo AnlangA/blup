@@ -33,6 +33,7 @@ esac
 case "$PHASE" in
     phase2.5)
         check_cmd "typst" "Typst" "typst --version" || ERRORS=$((ERRORS + 1))
+        check_cmd "cargo-tauri" "Tauri CLI" "cargo tauri --version" || ERRORS=$((ERRORS + 1))
         ;;
 esac
 

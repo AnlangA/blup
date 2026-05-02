@@ -1,0 +1,13 @@
+{
+  "id": "invalid-uuid",
+  "source_type": "invalid_type",
+  "title": "",
+  "origin": "",
+  "checksum": "invalid-checksum",
+  "extracted_at": "not-a-date",
+  "metadata": {
+    "word_count": -1,
+    "extraction_method": "unknown_method"
+  },
+  "chunks": "not-an-array"
+}

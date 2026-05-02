@@ -1,0 +1,10 @@
+{
+  "id": "770e8400-e29b-41d4-a716-446655440001",
+  "source_type": "website",
+  "source_url": "https://example.com/tutorial",
+  "config": {
+    "timeout_secs": 15
+  },
+  "status": "pending",
+  "created_at": "2024-01-15T11:00:00Z"
+}

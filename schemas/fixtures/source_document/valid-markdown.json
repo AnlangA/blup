@@ -1,0 +1,37 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "source_type": "markdown",
+  "title": "Introduction to Python Programming",
+  "origin": "/home/user/documents/python-intro.md",
+  "checksum": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "language": "en",
+  "extracted_at": "2024-01-15T10:30:00Z",
+  "metadata": {
+    "word_count": 2500,
+    "character_count": 15000,
+    "extraction_method": "markdown_parse",
+    "extraction_confidence": 1.0,
+    "ocr_applied": false,
+    "warnings": []
+  },
+  "chunks": [
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440001",
+      "document_id": "550e8400-e29b-41d4-a716-446655440000",
+      "index": 0,
+      "content": "# Introduction\n\nPython is a versatile programming language...",
+      "heading_path": ["Introduction"],
+      "token_count": 150,
+      "overlap_with_previous": false
+    },
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440002",
+      "document_id": "550e8400-e29b-41d4-a716-446655440000",
+      "index": 1,
+      "content": "## Variables\n\nVariables store data values...",
+      "heading_path": ["Introduction", "Variables"],
+      "token_count": 200,
+      "overlap_with_previous": true
+    }
+  ]
+}

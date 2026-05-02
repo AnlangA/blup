@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useSessionStore } from "./state/sessionStore";
 import {
   useCreatePlan,
@@ -111,26 +111,44 @@ function App() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const createPlan = useCreatePlan();
 
+  // Tracks whether the auto-create effect has fired at least once.
+  // Prevents showing "Initializing..." forever when the user deletes
+  // all plans (which also makes plans.length === 0).
+  const hasAttemptedCreate = useRef(false);
+
   // Periodically sync all plan states from the server so that inactive
   // plans reflect state transitions made by backend operations (e.g.,
   // completing all chapters advances the plan to COMPLETED).
   useSyncPlansFromServer();
 
-  // Auto-create first plan on initial load if none exist
+  // Auto-create first plan on initial load if none exist.
+  // Guarded by hasAttemptedCreate ref so React 18 Strict Mode (which
+  // double-invokes effects in dev) doesn't create two empty plans.
   useEffect(() => {
-    if (plans.length === 0 && !createPlan.isPending) {
+    if (plans.length === 0 && !createPlan.isPending && !hasAttemptedCreate.current) {
+      hasAttemptedCreate.current = true;
       createPlan.mutate();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // No plans yet — either showing welcome or auto-creating one.
-  // Show loading to avoid a flash of the welcome screen before the
-  // auto-create mutation fires on first render.
+  // No plans yet — always show the empty-state shell with a "+ New Plan"
+  // button. The auto-create effect fires in the background on initial load
+  // so the user never gets stuck on a loading screen.
   if (plans.length === 0) {
-    if (createPlan.isError) {
+    if (createPlan.isError && hasAttemptedCreate.current) {
       return <ErrorDisplay />;
     }
-    return <div className="loading-screen">Initializing...</div>;
+    return (
+      <div className="app-shell">
+        <PlanSwitcher />
+        <div className="main-content-area">
+          <div className="welcome-content">
+            <h2>Welcome to Blup</h2>
+            <p>Create a new plan to start learning.</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

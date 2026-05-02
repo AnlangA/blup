@@ -26,6 +26,11 @@ class Settings:
     max_retries: int = 2
     retry_base_delay_secs: float = 1.0
     streaming_timeout_secs: float = 120.0
+    # Circuit breaker settings
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_recovery_timeout_secs: float = 30.0
+    # Fallback chains (JSON dict: primary_model → [fallback_models])
+    fallback_chains: dict = None  # set in __post_init__
 
     def __post_init__(self):
         port_str = os.getenv("GATEWAY_PORT", "9000")
@@ -52,6 +57,40 @@ class Settings:
         self.streaming_timeout_secs = float(
             os.getenv("GATEWAY_STREAMING_TIMEOUT_SECS", str(self.streaming_timeout_secs))
         )
+        self.circuit_breaker_failure_threshold = int(
+            os.getenv(
+                "GATEWAY_CB_FAILURE_THRESHOLD",
+                str(self.circuit_breaker_failure_threshold),
+            )
+        )
+        self.circuit_breaker_recovery_timeout_secs = float(
+            os.getenv(
+                "GATEWAY_CB_RECOVERY_TIMEOUT_SECS",
+                str(self.circuit_breaker_recovery_timeout_secs),
+            )
+        )
+
+        # Default fallback chains
+        import json
+
+        fallback_raw = os.getenv("GATEWAY_FALLBACK_CHAINS", "")
+        if fallback_raw:
+            self.fallback_chains = json.loads(fallback_raw)
+        else:
+            self.fallback_chains = {
+                "gpt-4o": ["gpt-4o", "gpt-4o-mini", "claude-sonnet-4-20250514"],
+                "gpt-4o-mini": ["gpt-4o-mini", "gpt-4.1-mini"],
+                "claude-sonnet-4-20250514": [
+                    "claude-sonnet-4-20250514",
+                    "claude-3-5-haiku-20241022",
+                ],
+                "claude-3-5-sonnet-20241022": [
+                    "claude-3-5-sonnet-20241022",
+                    "claude-3-5-haiku-20241022",
+                ],
+                "o1": ["o1", "o1-mini"],
+                "o1-mini": ["o1-mini", "o3-mini"],
+            }
 
 
 settings = Settings()

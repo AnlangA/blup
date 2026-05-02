@@ -1,0 +1,29 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440020",
+  "source_type": "website",
+  "title": "MDN Web Docs - JavaScript Guide",
+  "origin": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide",
+  "checksum": "sha256:b3a8e0e1f9ab1bfe3a36f2320000000000000000000000000000000000000000",
+  "language": "en",
+  "license_or_usage_note": "MDN Web Docs content is licensed under CC-BY-SA 2.5",
+  "extracted_at": "2024-01-15T12:00:00Z",
+  "metadata": {
+    "word_count": 5000,
+    "character_count": 30000,
+    "extraction_method": "fetch_readability",
+    "extraction_confidence": 0.9,
+    "ocr_applied": false,
+    "warnings": ["Some code examples were truncated"]
+  },
+  "chunks": [
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440021",
+      "document_id": "550e8400-e29b-41d4-a716-446655440020",
+      "index": 0,
+      "content": "JavaScript Guide\n\nJavaScript is a lightweight, interpreted programming language...",
+      "heading_path": ["JavaScript Guide"],
+      "token_count": 250,
+      "overlap_with_previous": false
+    }
+  ]
+}

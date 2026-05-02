@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blup.dev/schemas/document_artifact.v1.schema.json",
+  "title": "DocumentArtifact",
+  "type": "object",
+  "version": "1.0.0",
+  "required": [
+    "id",
+    "format",
+    "checksum",
+    "size_bytes",
+    "generated_at",
+    "source_content_ids"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique artifact identifier"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Associated learning session"
+    },
+    "format": {
+      "type": "string",
+      "enum": ["pdf", "typst"],
+      "description": "Artifact format"
+    },
+    "checksum": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 content hash"
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "File size in bytes"
+    },
+    "page_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of pages (PDF only)"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the artifact was generated"
+    },
+    "source_content_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "description": "Source chapter/curriculum IDs used to generate this artifact"
+    },
+    "source_typst": {
+      "type": "string",
+      "description": "Typst source for reproducibility"
+    }
+  },
+  "additionalProperties": false
+}

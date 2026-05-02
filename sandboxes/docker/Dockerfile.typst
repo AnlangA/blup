@@ -1,0 +1,23 @@
+FROM alpine:3.19
+
+# Install Typst and basic tools
+RUN apk add --no-cache \
+    typst \
+    font-inter \
+    font-noto \
+    && rm -rf /var/cache/apk/*
+
+# Create sandbox user
+RUN adduser -D -u 1000 sandbox
+
+# Create workspace
+RUN mkdir -p /workspace && chown sandbox:sandbox /workspace
+
+# Switch to sandbox user
+USER sandbox
+
+# Set working directory
+WORKDIR /workspace
+
+# Default entrypoint
+ENTRYPOINT ["typst"]
