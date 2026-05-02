@@ -876,9 +876,9 @@ async fn test_complete_multiple_chapters() {
     assert_eq!(status, 200);
     assert_eq!(body["status"], "completed");
 
-    // Session should still be in CHAPTER_LEARNING
+    // Session should now be COMPLETED since all chapters are done
     let (_, session) = h.get(&format!("/api/session/{sid}")).await;
-    assert_eq!(session["state"], "CHAPTER_LEARNING");
+    assert_eq!(session["state"], "COMPLETED");
 }
 
 // ---------------------------------------------------------------------------

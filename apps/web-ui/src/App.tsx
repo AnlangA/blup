@@ -1,6 +1,11 @@
 import { useEffect } from "react";
 import { useSessionStore } from "./state/sessionStore";
-import { useCreatePlan, useSession, useSessionPlanSync } from "./hooks/query";
+import {
+  useCreatePlan,
+  useSession,
+  useSessionPlanSync,
+  useSyncPlansFromServer,
+} from "./hooks/query";
 import { GoalInput } from "./components/session/GoalInput";
 import { FeasibilityResult } from "./components/session/FeasibilityResult";
 import { ProfileQuestion } from "./components/session/ProfileQuestion";
@@ -13,6 +18,9 @@ function MainContent() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const currentChapterId = useSessionStore((s) => s.currentChapterId);
   const setChapter = useSessionStore((s) => s.setChapter);
+  const removePlan = useSessionStore((s) => s.removePlan);
+  const plans = useSessionStore((s) => s.plans);
+  const setActivePlan = useSessionStore((s) => s.setActivePlan);
 
   const {
     data: session,
@@ -29,8 +37,21 @@ function MainContent() {
     }
   }, [session?.current_chapter_id, currentChapterId, setChapter]);
 
+  // When the active session no longer exists on the server, clean up the
+  // local stale entry and auto-switch to the next available plan.
+  useEffect(() => {
+    if (!sessionError || !sessionId) return;
+    const code = (sessionErr as { code?: string } | null)?.code;
+    if (code === "NOT_FOUND") {
+      removePlan(sessionId);
+      const remaining = plans.filter((p) => p.id !== sessionId);
+      if (remaining.length > 0) {
+        setActivePlan(remaining[0].id);
+      }
+    }
+  }, [sessionError, sessionId, sessionErr, removePlan, plans, setActivePlan]);
+
   // Show loading skeleton while session data is fetched for the first time.
-  // This prevents the flash of GoalInput / welcome screen on page refresh.
   if (sessionLoading) {
     return (
       <div className="main-content-area">
@@ -40,16 +61,6 @@ function MainContent() {
   }
 
   if (sessionError) {
-    const code = (sessionErr as { code?: string } | null)?.code;
-    if (code === "NOT_FOUND") {
-      return (
-        <div className="main-content-area">
-          <div className="welcome-content">
-            <p>This session no longer exists. Please select another plan.</p>
-          </div>
-        </div>
-      );
-    }
     return (
       <div className="main-content-area">
         <ErrorDisplay />
@@ -99,6 +110,11 @@ function App() {
   const plans = useSessionStore((s) => s.plans);
   const sessionId = useSessionStore((s) => s.sessionId);
   const createPlan = useCreatePlan();
+
+  // Periodically sync all plan states from the server so that inactive
+  // plans reflect state transitions made by backend operations (e.g.,
+  // completing all chapters advances the plan to COMPLETED).
+  useSyncPlansFromServer();
 
   // Auto-create first plan on initial load if none exist
   useEffect(() => {

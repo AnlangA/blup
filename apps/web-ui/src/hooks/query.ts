@@ -41,6 +41,15 @@ export function useDeletePlan() {
     onSuccess: (_data, planId) => {
       queryClient.removeQueries({ queryKey: ["session", planId] });
       queryClient.removeQueries({ queryKey: ["curriculum", planId] });
+      queryClient.removeQueries({ queryKey: ["sessions"] });
+      removePlan(planId);
+    },
+    // If the backend cannot find the session (404), it's already gone —
+    // clean up local state so the sidebar doesn't show a stale entry.
+    onError: (_err, planId) => {
+      queryClient.removeQueries({ queryKey: ["session", planId] });
+      queryClient.removeQueries({ queryKey: ["curriculum", planId] });
+      queryClient.removeQueries({ queryKey: ["sessions"] });
       removePlan(planId);
     },
   });
@@ -53,7 +62,6 @@ export function useSyncPlansFromServer() {
     queryKey: ["sessions"],
     queryFn: async () => {
       const entries = await api.listSessions();
-      // Read plans from store directly (not from closure) to avoid stale data
       const currentPlans = useSessionStore.getState().plans;
       for (const entry of entries) {
         const existing = currentPlans.find((p) => p.id === entry.id);
@@ -74,8 +82,9 @@ export function useSyncPlansFromServer() {
       }
       return entries;
     },
-    refetchOnWindowFocus: false,
-    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
   });
 }
 
@@ -132,6 +141,7 @@ export function useSubmitGoal(sessionId: string | null) {
     mutationFn: (goal: LearningGoal) => api.submitGoal(sessionId!, goal),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
     },
   });
 }
@@ -196,10 +206,12 @@ export function useSubmitGoalStream(sessionId: string | null) {
         onDone: (result) => {
           dispatch({ type: "done", result });
           queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+          queryClient.invalidateQueries({ queryKey: ["sessions"] });
         },
         onError: (_code, message) => {
           dispatch({ type: "error", message });
           queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+          queryClient.invalidateQueries({ queryKey: ["sessions"] });
         },
       });
     },
@@ -231,6 +243,7 @@ export function useSubmitProfile(sessionId: string | null) {
       api.submitProfileAnswer(sessionId!, answer),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
     },
   });
 }
@@ -331,6 +344,7 @@ export function useCompleteChapter(sessionId: string | null) {
       api.completeChapter(sessionId!, chapterId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
     },
   });
 }

@@ -280,5 +280,38 @@ pub async fn complete_chapter(
         tracing::warn!(session_id = %id, chapter_id = %ch_id, error = %e, "Failed to persist progress to storage");
     }
 
+    // If all curriculum chapters have been completed, advance to COMPLETED state.
+    if let Some(ref curriculum) = s.curriculum {
+        let total_chapters = curriculum.chapters.len();
+        if total_chapters > 0 {
+            match state.storage.get_all_progress(id).await {
+                Ok(progress_list) => {
+                    let completed_count = progress_list
+                        .iter()
+                        .filter(|p| {
+                            p.get("status")
+                                .and_then(|s| s.as_str())
+                                .map(|s| s == "completed")
+                                .unwrap_or(false)
+                        })
+                        .count();
+                    if completed_count >= total_chapters {
+                        if let Err(e) = s.state_machine.transition(Transition::AllChaptersDone) {
+                            tracing::error!(error = %e, "Transition AllChaptersDone failed unexpectedly");
+                        }
+                        s.updated_at = chrono::Utc::now();
+                        state.store.persist(s.id);
+                        if let Err(e) = state.storage.update_session_state(id, "COMPLETED").await {
+                            tracing::warn!(session_id = %id, error = %e, "Failed to update session state to COMPLETED");
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(session_id = %id, error = %e, "Failed to check progress for completion");
+                }
+            }
+        }
+    }
+
     Ok(Json(progress_value))
 }

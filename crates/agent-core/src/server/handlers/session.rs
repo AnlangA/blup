@@ -37,11 +37,11 @@ pub async fn delete_session(
     State(state): State<AppState>,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    if state.store.get(id).await.is_none() {
-        return Err(ApiError::NotFound);
-    }
+    // Remove from in-memory store (may or may not exist).
     state.store.delete(id).await;
 
+    // Always attempt storage cleanup — the session might exist in SQL
+    // even if the in-memory store was restarted with a different data_dir.
     if let Err(e) = state.storage.delete_session(id).await {
         tracing::warn!(session_id = %id, error = %e, "Failed to delete session from storage");
     }

@@ -153,7 +153,8 @@ impl ContainerExecutor {
             .stderr(std::process::Stdio::null())
             .status();
 
-        // Wait a bit for container to die
+        // Wait briefly for the container to stop — this runs on the blocking
+        // thread pool (called from spawn_blocking) so thread::sleep is fine.
         std::thread::sleep(Duration::from_millis(500));
 
         self.force_remove_container(name);
