@@ -82,3 +82,9 @@ impl From<crate::state::types::StateError> for ApiError {
         ApiError::InvalidTransition(e.to_string())
     }
 }
+
+impl From<storage::StorageError> for ApiError {
+    fn from(e: storage::StorageError) -> Self {
+        ApiError::Internal(format!("Storage error: {e}"))
+    }
+}

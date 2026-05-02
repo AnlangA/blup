@@ -1,0 +1,13 @@
+FROM node:22-slim
+
+# Create sandbox user
+RUN useradd -m -u 1000 sandbox
+
+# Switch to sandbox user
+USER sandbox
+
+# Set working directory
+WORKDIR /workspace
+
+# Default entrypoint
+ENTRYPOINT ["node", "-e"]

@@ -1,0 +1,14 @@
+{
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "session_id": "660e8400-e29b-41d4-a716-446655440000",
+  "tool_kind": "python_exec",
+  "code": "print('test')",
+  "limits": {
+    "compile_timeout_secs": 10,
+    "run_timeout_secs": 5,
+    "memory_mb": 256,
+    "cpu_count": 1.0,
+    "network_enabled": false,
+    "max_processes": 5
+  }
+}

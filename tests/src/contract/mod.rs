@@ -233,3 +233,73 @@ fn test_chapter_progress_status_contract() {
         );
     }
 }
+
+// ── Phase 2: Fixture-based schema validation ──
+
+/// Run all valid-*.json fixtures through schema validation. Each fixture must pass.
+#[test]
+fn test_all_valid_fixtures_pass_validation() {
+    let validator = SchemaValidator::new("../schemas");
+    let fixture_root = std::path::Path::new("../schemas/fixtures");
+
+    let mut checked = 0usize;
+    for schema_entry in std::fs::read_dir(fixture_root).expect("fixtures directory must exist") {
+        let schema_dir = schema_entry.unwrap();
+        let schema_name = schema_dir.file_name().to_string_lossy().to_string();
+        for file_entry in std::fs::read_dir(schema_dir.path()).unwrap() {
+            let path = file_entry.unwrap().path();
+            let fname = path.file_name().unwrap().to_string_lossy();
+            if !fname.starts_with("valid-") || !fname.ends_with(".json") {
+                continue;
+            }
+            let content = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+            let data: serde_json::Value = serde_json::from_str(&content)
+                .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", path.display()));
+            assert!(
+                validator.validate(&data, &schema_name).is_ok(),
+                "Valid fixture {} should pass schema {} validation",
+                path.display(),
+                schema_name
+            );
+            checked += 1;
+        }
+    }
+    assert!(
+        checked > 0,
+        "Should have validated at least one valid fixture"
+    );
+}
+
+/// Run all invalid-*.json fixtures through schema validation. Each fixture must fail.
+#[test]
+fn test_all_invalid_fixtures_fail_validation() {
+    let validator = SchemaValidator::new("../schemas");
+    let fixture_root = std::path::Path::new("../schemas/fixtures");
+
+    let mut checked = 0usize;
+    for schema_entry in std::fs::read_dir(fixture_root).unwrap() {
+        let schema_dir = schema_entry.unwrap();
+        let schema_name = schema_dir.file_name().to_string_lossy().to_string();
+        for file_entry in std::fs::read_dir(schema_dir.path()).unwrap() {
+            let path = file_entry.unwrap().path();
+            let fname = path.file_name().unwrap().to_string_lossy();
+            if !fname.starts_with("invalid-") || !fname.ends_with(".json") {
+                continue;
+            }
+            let content = std::fs::read_to_string(&path).unwrap();
+            let data: serde_json::Value = serde_json::from_str(&content).unwrap();
+            assert!(
+                validator.validate(&data, &schema_name).is_err(),
+                "Invalid fixture {} should fail schema {} validation",
+                path.display(),
+                schema_name
+            );
+            checked += 1;
+        }
+    }
+    assert!(
+        checked > 0,
+        "Should have validated at least one invalid fixture"
+    );
+}

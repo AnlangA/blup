@@ -31,45 +31,17 @@ pub struct AgentEngine {
 }
 
 impl AgentEngine {
+    /// Create an engine from configuration, building the LLM provider from
+    /// the provider config.
     pub async fn new(config: AgentConfig) -> Result<Self, AgentError> {
         let provider = ProviderFactory::from_config(&config.provider)?;
         let prompts = Arc::new(PromptLoader::new(&config.prompts_dir));
         let validator = Arc::new(SchemaValidator::new(&config.schemas_dir));
-
-        let audit = if config.audit.enabled {
-            Some(Arc::new(AuditLogger::new(&config.audit)))
-        } else {
-            None
-        };
-
-        let memory = MemoryManager::new(&config.memory, Some(Arc::clone(&provider)));
-        let mcp = McpManager::new(
-            &config.mcp,
-            config.memory.storage_dir.clone(),
-            audit.clone(),
-        )
-        .await;
-
-        let tools = ToolRegistry::new();
-        tools.register(Arc::new(crate::tools::builtin::CalculatorTool));
-        if config.search.provider != crate::config::SearchProvider::None {
-            tools.register(Arc::new(crate::tools::web_search::WebSearchTool::new(
-                config.search.clone(),
-            )));
-        }
-
-        Ok(Self {
-            provider,
-            prompts,
-            validator,
-            config,
-            memory: Mutex::new(memory),
-            audit,
-            mcp: Mutex::new(mcp),
-            tools: Arc::new(tools),
-        })
+        Ok(Self::with_provider(provider, prompts, validator, config).await)
     }
 
+    /// Create an engine with a pre-built provider (useful for testing with
+    /// mock providers).
     pub async fn with_provider(
         provider: Arc<dyn LlmProvider>,
         prompts: Arc<PromptLoader>,
@@ -82,20 +54,14 @@ impl AgentEngine {
             None
         };
         let memory = MemoryManager::new(&config.memory, Some(Arc::clone(&provider)));
-        let mcp_manager = McpManager::new(
+        let mcp = McpManager::new(
             &config.mcp,
             config.memory.storage_dir.clone(),
             audit.clone(),
         )
         .await;
 
-        let tools = ToolRegistry::new();
-        tools.register(Arc::new(crate::tools::builtin::CalculatorTool));
-        if config.search.provider != crate::config::SearchProvider::None {
-            tools.register(Arc::new(crate::tools::web_search::WebSearchTool::new(
-                config.search.clone(),
-            )));
-        }
+        let tools = Self::build_tools(&config);
 
         Self {
             provider,
@@ -104,9 +70,20 @@ impl AgentEngine {
             config,
             memory: Mutex::new(memory),
             audit,
-            mcp: Mutex::new(mcp_manager),
+            mcp: Mutex::new(mcp),
             tools: Arc::new(tools),
         }
+    }
+
+    fn build_tools(config: &AgentConfig) -> ToolRegistry {
+        let tools = ToolRegistry::new();
+        tools.register(Arc::new(crate::tools::builtin::CalculatorTool));
+        if config.search.provider != crate::config::SearchProvider::None {
+            tools.register(Arc::new(crate::tools::web_search::WebSearchTool::new(
+                config.search.clone(),
+            )));
+        }
+        tools
     }
 
     pub fn config(&self) -> &AgentConfig {

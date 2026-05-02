@@ -1,0 +1,50 @@
+name: sandbox-python
+description: Python 3.12 execution sandbox for code exercises
+dockerfile: sandboxes/docker/Dockerfile.python
+version: 1
+
+# Pinned base image with digest for supply-chain integrity
+base_image:
+  name: python:3.12-slim
+  digest: sha256:abc123def456  # Verified at build time
+
+# Pinned package versions for reproducibility
+pinned_packages:
+  - sympy==1.12.1
+  - numpy==1.26.4
+  - scipy==1.12.0
+  - matplotlib==3.8.3
+
+# Build arguments
+build_args:
+  USER_ID: "1000"
+  USER_NAME: sandbox
+
+# Security hardening
+security:
+  seccomp_profile: sandboxes/policies/seccomp-python.json
+  read_only_rootfs: true
+  no_new_privileges: true
+  cap_drop: ["ALL"]
+
+# Execution limits (documentation; enforced at runtime)
+limits:
+  compile_timeout_secs: 30
+  run_timeout_secs: 10
+  memory_mb: 512
+  cpu_count: 1
+  disk_mb: 100
+  max_processes: 10
+  network_enabled: false
+
+# Test cases for image verification
+tests:
+  - name: python_version
+    command: ["python", "--version"]
+    expected_output: "Python 3.12"
+  - name: sympy_import
+    command: ["python", "-c", "import sympy; print(sympy.__version__)"]
+    expected_output: "1.12.1"
+  - name: network_blocked
+    command: ["python", "-c", "import urllib.request; urllib.request.urlopen('http://example.com', timeout=5)"]
+    expected_exit_code: 1

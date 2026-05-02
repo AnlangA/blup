@@ -120,4 +120,6 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub store: state::session::InMemorySessionStore,
     pub agent: Arc<blup_agent::AgentEngine>,
+    pub storage: storage::Storage,
+    pub assessment: assessment_engine::AssessmentEngine,
 }

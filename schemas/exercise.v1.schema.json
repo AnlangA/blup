@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "exercise.v1.schema.json",
+  "title": "Exercise",
+  "description": "An exercise generated for learner assessment",
+  "type": "object",
+  "required": ["id", "chapter_id", "question", "exercise_type", "difficulty", "max_score"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique exercise identifier"
+    },
+    "chapter_id": {
+      "type": "string",
+      "description": "ID of the chapter this exercise belongs to"
+    },
+    "question": {
+      "type": "string",
+      "description": "Exercise question in Markdown format"
+    },
+    "exercise_type": {
+      "type": "object",
+      "description": "Type and configuration of the exercise",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "options", "correct_index"],
+          "properties": {
+            "type": { "const": "multiple_choice" },
+            "options": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 2
+            },
+            "correct_index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "model_answer", "key_points"],
+          "properties": {
+            "type": { "const": "short_answer" },
+            "model_answer": { "type": "string" },
+            "key_points": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "language", "test_cases"],
+          "properties": {
+            "type": { "const": "coding" },
+            "language": { "type": "string" },
+            "starter_code": { "type": "string" },
+            "test_cases": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["input", "expected_output"],
+                "properties": {
+                  "input": { "type": "string" },
+                  "expected_output": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "prompt", "min_length"],
+          "properties": {
+            "type": { "const": "reflection" },
+            "prompt": { "type": "string" },
+            "min_length": { "type": "integer", "minimum": 1 },
+            "rubric_dimensions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "description", "max_score"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "max_score": { "type": "number" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": ["easy", "medium", "hard"],
+      "description": "Difficulty level"
+    },
+    "rubric": {
+      "type": "object",
+      "description": "Rubric for evaluation"
+    },
+    "max_score": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Maximum possible score"
+    },
+    "hints": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Hints for the learner"
+    },
+    "explanation": {
+      "type": "string",
+      "description": "Explanation shown after answering"
+    }
+  }
+}

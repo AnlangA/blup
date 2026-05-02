@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "assessment_result.v1.schema.json",
+  "title": "AssessmentResult",
+  "description": "Result of evaluating a learner's answer to an exercise",
+  "type": "object",
+  "required": ["exercise_id", "learner_answer", "score", "max_score", "feedback", "is_correct"],
+  "properties": {
+    "exercise_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "ID of the exercise being evaluated"
+    },
+    "learner_answer": {
+      "type": "object",
+      "description": "The learner's answer"
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Score achieved"
+    },
+    "max_score": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Maximum possible score"
+    },
+    "feedback": {
+      "type": "string",
+      "description": "Personalized feedback in Markdown"
+    },
+    "rubric_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["dimension", "score", "max_score", "comment"],
+        "properties": {
+          "dimension": { "type": "string" },
+          "score": { "type": "number" },
+          "max_score": { "type": "number" },
+          "comment": { "type": "string" }
+        }
+      },
+      "description": "Detailed rubric evaluation results"
+    },
+    "is_correct": {
+      "type": "boolean",
+      "description": "Whether the answer is considered correct (score >= threshold)"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "session_id": "660e8400-e29b-41d4-a716-446655440000",
+  "status": "timeout_run",
+  "exit_code": null,
+  "stdout": "",
+  "stderr": "",
+  "stdout_truncated": false,
+  "stderr_truncated": false,
+  "duration_ms": 10000,
+  "error": {
+    "code": "TIMEOUT",
+    "message": "Execution timed out after 10 seconds"
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "sandbox_result.v1.schema.json",
+  "title": "SandboxResult",
+  "description": "Result of executing code in a sandboxed environment",
+  "type": "object",
+  "required": ["request_id", "status", "exit_code", "stdout", "stderr", "stdout_truncated", "stderr_truncated", "duration_ms"],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique request identifier"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Learning session ID"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "timeout_compile", "timeout_run", "memory_exceeded", "cpu_exceeded", "disk_exceeded", "non_zero_exit", "network_blocked", "internal_error"],
+      "description": "Execution status"
+    },
+    "exit_code": {
+      "type": ["integer", "null"],
+      "description": "Process exit code (null if terminated by signal)"
+    },
+    "stdout": {
+      "type": "string",
+      "description": "Standard output (truncated to 64KB)"
+    },
+    "stderr": {
+      "type": "string",
+      "description": "Standard error (truncated to 64KB)"
+    },
+    "stdout_truncated": {
+      "type": "boolean",
+      "description": "Whether stdout was truncated"
+    },
+    "stderr_truncated": {
+      "type": "boolean",
+      "description": "Whether stderr was truncated"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Execution duration in milliseconds"
+    },
+    "resource_usage": {
+      "type": "object",
+      "description": "Resource usage metrics",
+      "properties": {
+        "peak_memory_mb": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Peak memory usage in MB"
+        },
+        "cpu_time_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "CPU time in milliseconds"
+        },
+        "disk_used_kb": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Disk usage in KB"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "description": "Error details if execution failed",
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

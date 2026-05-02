@@ -1,16 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LearningGoal {
-    pub description: String,
-    pub domain: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub context: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub current_level: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileAnswer {
     pub question_id: String,
     pub answer: String,

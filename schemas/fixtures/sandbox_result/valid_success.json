@@ -1,0 +1,15 @@
+{
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "session_id": "660e8400-e29b-41d4-a716-446655440000",
+  "status": "success",
+  "exit_code": 0,
+  "stdout": "Hello, World!\n",
+  "stderr": "",
+  "stdout_truncated": false,
+  "stderr_truncated": false,
+  "duration_ms": 150,
+  "resource_usage": {
+    "peak_memory_mb": 25.5,
+    "cpu_time_ms": 120
+  }
+}

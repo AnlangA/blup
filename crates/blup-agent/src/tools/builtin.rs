@@ -108,6 +108,57 @@ mod tests {
 
     #[test]
     fn test_with_spaces() {
-        assert_eq!(evaluate_simple("2 + 3 * 4").unwrap(), 20.0); // Note: simple left-to-right evaluation
+        // Simple left-to-right evaluation: (2+3)*4 = 20
+        assert_eq!(evaluate_simple("2 + 3 * 4").unwrap(), 20.0);
+    }
+
+    #[test]
+    fn test_division_by_zero() {
+        let result = evaluate_simple("5/0");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Division by zero"));
+    }
+
+    #[test]
+    fn test_empty_expression() {
+        let result = evaluate_simple("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_expression() {
+        let result = evaluate_simple("+ 5");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_power_operator() {
+        assert_eq!(evaluate_simple("2^3").unwrap(), 8.0);
+    }
+
+    #[test]
+    fn test_decimal_numbers() {
+        let result = evaluate_simple("2.5+3.5").unwrap();
+        assert!((result - 6.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_negative_result() {
+        assert_eq!(evaluate_simple("3-10").unwrap(), -7.0);
+    }
+
+    #[tokio::test]
+    async fn test_calculator_tool_execute() {
+        let tool = CalculatorTool;
+        let result = tool.execute(json!({"expression": "2+3"})).await.unwrap();
+        assert!(!result.is_error);
+        assert!(result.content.contains("5"));
+    }
+
+    #[tokio::test]
+    async fn test_calculator_missing_expression() {
+        let tool = CalculatorTool;
+        let result = tool.execute(json!({})).await;
+        assert!(result.is_err());
     }
 }

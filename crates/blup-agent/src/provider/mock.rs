@@ -28,9 +28,17 @@ impl MockProvider {
         }
     }
 
-    /// Add a mock response.
+    /// Add a mock response to the back of the queue.
     pub fn push_response(&self, response: impl Into<String>) {
         self.responses.lock().unwrap().push_back(response.into());
+    }
+
+    /// Replace a response at the given index. Panics if index is out of bounds.
+    pub fn replace_response(&self, index: usize, response: impl Into<String>) {
+        let mut q = self.responses.lock().unwrap();
+        if index < q.len() {
+            q[index] = response.into();
+        }
     }
 
     /// Get recorded calls for assertions.

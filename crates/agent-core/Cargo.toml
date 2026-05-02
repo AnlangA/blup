@@ -6,10 +6,12 @@ description = "Blup AI learning-agent core — HTTP server, state machine, sessi
 
 [dependencies]
 blup-agent = { path = "../blup-agent" }
+storage = { path = "../storage" }
+assessment-engine = { path = "../assessment-engine" }
 axum = { version = "0.7", features = ["macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "net"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace", "request-id", "limit"] }
+tower = { version = "0.4", features = ["timeout"] }
+tower-http = { version = "0.5", features = ["cors"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
@@ -24,4 +26,5 @@ async-stream = "0.3"
 dotenvy = "0.15"
 
 [dev-dependencies]
+tempfile = "3"
 tower = { version = "0.4", features = ["util"] }

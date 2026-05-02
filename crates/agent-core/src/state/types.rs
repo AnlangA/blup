@@ -51,3 +51,20 @@ pub enum StateError {
         transition: Transition,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_session_state_display() {
+        assert_eq!(SessionState::Idle.to_string(), "IDLE");
+        assert_eq!(SessionState::GoalInput.to_string(), "GOAL_INPUT");
+        assert_eq!(
+            SessionState::ChapterLearning.to_string(),
+            "CHAPTER_LEARNING"
+        );
+        assert_eq!(SessionState::Completed.to_string(), "COMPLETED");
+        assert_eq!(SessionState::Error.to_string(), "ERROR");
+    }
+}

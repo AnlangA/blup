@@ -1,10 +1,12 @@
+use std::collections::HashMap;
+
 use agent_core::state::machine::StateMachine;
 use agent_core::state::types::{SessionState, Transition};
 use blup_agent::prompt::PromptLoader;
 use blup_agent::schema::SchemaValidator;
 use serde_json::json;
 
-use crate::common::TestHarness;
+use crate::common::{make_mock_provider, TestHarness};
 
 // ── Schema validation tests (sync, no server needed) ──
 
@@ -210,6 +212,37 @@ fn test_prompt_loader_reload() {
     loader.reload_partials();
     let second = loader.load("feasibility_check", 1).unwrap();
     assert_eq!(first, second);
+}
+
+#[test]
+fn test_prompt_loader_loads_templates() {
+    let loader = PromptLoader::new("../prompts");
+    let template = loader.load("feasibility_check", 1);
+    assert!(template.is_ok());
+    assert!(template
+        .unwrap()
+        .contains("Evaluate whether a learning goal"));
+}
+
+#[test]
+fn test_prompt_loader_renders_variables() {
+    let loader = PromptLoader::new("../prompts");
+    let template = loader.load("feasibility_check", 1).unwrap();
+    let mut vars = HashMap::new();
+    vars.insert("learning_goal".to_string(), "Learn Python".to_string());
+    vars.insert("domain".to_string(), "programming".to_string());
+    vars.insert("context".to_string(), "No experience".to_string());
+
+    let rendered = loader.render(&template, &vars);
+    assert!(rendered.contains("Learn Python"));
+    assert!(rendered.contains("programming"));
+}
+
+#[test]
+fn test_prompt_loader_template_not_found() {
+    let loader = PromptLoader::new("../prompts");
+    let result = loader.load("nonexistent_template", 1);
+    assert!(result.is_err());
 }
 
 // ── HTTP API Integration Tests ──
@@ -483,7 +516,7 @@ async fn test_sse_submit_goal_stream() {
     let sid = body["session_id"].as_str().unwrap();
 
     let url = format!("{}/api/session/{sid}/goal/stream", h.base_url);
-    let client = reqwest::Client::new();
+    let client = TestHarness::http_client();
     let resp = client
         .post(&url)
         .json(&json!({
@@ -526,7 +559,7 @@ async fn test_sse_goal_stream_rejects_short_description() {
     let sid = body["session_id"].as_str().unwrap();
 
     let url = format!("{}/api/session/{sid}/goal/stream", h.base_url);
-    let client = reqwest::Client::new();
+    let client = TestHarness::http_client();
     let resp = client
         .post(&url)
         .json(&json!({"description": "Short", "domain": "x"}))
@@ -545,7 +578,7 @@ async fn test_sse_chapter_stream() {
     let sid = h.setup_learning().await;
 
     let url = format!("{}/api/session/{sid}/chapter/ch1/stream", h.base_url);
-    let client = reqwest::Client::new();
+    let client = TestHarness::http_client();
     let resp = client.get(&url).send().await.unwrap();
     assert!(resp.status().is_success());
 
@@ -571,10 +604,12 @@ async fn test_concurrent_session_reads() {
     let url = format!("{}/api/session/{sid}", h.base_url);
 
     // 10 concurrent read requests to the same session
+    let client = TestHarness::http_client();
     let handles: Vec<_> = (0..10)
         .map(|_| {
             let u = url.clone();
-            tokio::spawn(async move { reqwest::get(&u).await.unwrap() })
+            let c = client.clone();
+            tokio::spawn(async move { c.get(&u).send().await.unwrap() })
         })
         .collect();
 
@@ -596,11 +631,12 @@ async fn test_concurrent_session_read_write() {
 
     let t1 = tokio::spawn({
         let u = read_url.clone();
-        async move { reqwest::get(&u).await.unwrap() }
+        let c = TestHarness::http_client();
+        async move { c.get(&u).send().await.unwrap() }
     });
 
     let t2 = tokio::spawn(async move {
-        let client = reqwest::Client::new();
+        let client = TestHarness::http_client();
         client
             .post(&write_url)
             .json(&serde_json::json!({"question": "What is a variable?"}))
@@ -843,4 +879,318 @@ async fn test_complete_multiple_chapters() {
     // Session should still be in CHAPTER_LEARNING
     let (_, session) = h.get(&format!("/api/session/{sid}")).await;
     assert_eq!(session["state"], "CHAPTER_LEARNING");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Schema validation tests
+// ---------------------------------------------------------------------------
+
+// Phase 2 schema tests: valid-only (invalid cases tested in unit tests per crate)
+
+#[test]
+fn test_exercise_schema_valid() {
+    let validator = SchemaValidator::new("../schemas");
+    let valid = vec![
+        json!({
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "chapter_id": "ch1",
+            "question": "What is 2+2?",
+            "exercise_type": {
+                "type": "multiple_choice",
+                "options": ["3", "4", "5"],
+                "correct_index": 1
+            },
+            "difficulty": "easy",
+            "max_score": 1.0
+        }),
+        json!({
+            "id": "550e8400-e29b-41d4-a716-446655440001",
+            "chapter_id": "ch2",
+            "question": "Explain Rust",
+            "exercise_type": {
+                "type": "short_answer",
+                "model_answer": "Rust is a systems programming language",
+                "key_points": ["systems programming", "memory safety"]
+            },
+            "difficulty": "medium",
+            "max_score": 3.0
+        }),
+    ];
+    for v in &valid {
+        assert!(
+            validator.validate(v, "exercise").is_ok(),
+            "Expected valid: {}",
+            serde_json::to_string_pretty(v).unwrap()
+        );
+    }
+}
+
+#[test]
+fn test_assessment_result_schema_valid() {
+    let validator = SchemaValidator::new("../schemas");
+    let valid = vec![
+        json!({
+            "exercise_id": "550e8400-e29b-41d4-a716-446655440000",
+            "learner_answer": {"selected_index": 1},
+            "score": 1.0,
+            "max_score": 1.0,
+            "feedback": "Correct!",
+            "is_correct": true
+        }),
+        json!({
+            "exercise_id": "550e8400-e29b-41d4-a716-446655440000",
+            "learner_answer": {"selected_index": 0},
+            "score": 0.0,
+            "max_score": 1.0,
+            "feedback": "Wrong answer.",
+            "is_correct": false
+        }),
+    ];
+    for v in &valid {
+        assert!(
+            validator.validate(v, "assessment_result").is_ok(),
+            "Expected valid: {}",
+            serde_json::to_string_pretty(v).unwrap()
+        );
+    }
+}
+
+#[test]
+fn test_sandbox_request_schema_valid() {
+    let validator = SchemaValidator::new("../schemas");
+    let valid = vec![
+        json!({
+            "request_id": "550e8400-e29b-41d4-a716-446655440000",
+            "session_id": "660e8400-e29b-41d4-a716-446655440000",
+            "tool_kind": "python_exec",
+            "code": "print('hello')"
+        }),
+        json!({
+            "request_id": "550e8400-e29b-41d4-a716-446655440001",
+            "session_id": "660e8400-e29b-41d4-a716-446655440001",
+            "tool_kind": "node_exec",
+            "code": "console.log('hi')",
+            "limits": {
+                "compile_timeout_secs": 10,
+                "run_timeout_secs": 5,
+                "memory_mb": 256,
+                "network_enabled": false
+            }
+        }),
+    ];
+    for v in &valid {
+        assert!(
+            validator.validate(v, "sandbox_request").is_ok(),
+            "Expected valid: {}",
+            serde_json::to_string_pretty(v).unwrap()
+        );
+    }
+}
+
+#[test]
+fn test_sandbox_result_schema_valid() {
+    let validator = SchemaValidator::new("../schemas");
+    let valid = vec![
+        json!({
+            "request_id": "550e8400-e29b-41d4-a716-446655440000",
+            "session_id": "660e8400-e29b-41d4-a716-446655440000",
+            "status": "success",
+            "exit_code": 0,
+            "stdout": "hello\n",
+            "stderr": "",
+            "stdout_truncated": false,
+            "stderr_truncated": false,
+            "duration_ms": 100
+        }),
+        json!({
+            "request_id": "550e8400-e29b-41d4-a716-446655440000",
+            "status": "timeout_run",
+            "exit_code": null,
+            "stdout": "",
+            "stderr": "",
+            "stdout_truncated": false,
+            "stderr_truncated": false,
+            "duration_ms": 10000
+        }),
+    ];
+    for v in &valid {
+        assert!(
+            validator.validate(v, "sandbox_result").is_ok(),
+            "Expected valid: {}",
+            serde_json::to_string_pretty(v).unwrap()
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: API endpoint tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_get_progress_empty() {
+    let h = TestHarness::new().await;
+    let (_, body) = h.post("/api/session", None).await;
+    let sid = body["session_id"].as_str().unwrap();
+
+    let (status, body) = h.get(&format!("/api/session/{sid}/progress")).await;
+    assert_eq!(status, 200);
+    assert!(body["progress"].is_array());
+    assert_eq!(body["progress"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn test_get_progress_after_complete() {
+    let h = TestHarness::new().await;
+    let sid = h.setup_learning().await;
+
+    // Complete a chapter
+    h.post(&format!("/api/session/{sid}/chapter/ch1/complete"), None)
+        .await;
+
+    let (status, body) = h.get(&format!("/api/session/{sid}/progress")).await;
+    assert_eq!(status, 200);
+    assert!(body["progress"].is_array());
+    let progress = body["progress"].as_array().unwrap();
+    assert!(!progress.is_empty());
+    assert_eq!(progress[0]["status"], "completed");
+    assert_eq!(progress[0]["completion"], 100.0);
+}
+
+#[tokio::test]
+async fn test_submit_exercise_no_curriculum() {
+    let h = TestHarness::new().await;
+    let (_, body) = h.post("/api/session", None).await;
+    let sid = body["session_id"].as_str().unwrap();
+
+    let (status, _body) = h
+        .post(
+            &format!("/api/session/{sid}/chapter/ch1/exercise/ex1/submit"),
+            Some(json!({"answer": {"selected_index": 0}})),
+        )
+        .await;
+    assert_eq!(status, 422);
+}
+
+#[tokio::test]
+async fn test_progress_persists_across_chapters() {
+    let h = TestHarness::new().await;
+    let sid = h.setup_learning().await;
+
+    // Complete chapter 1
+    h.post(&format!("/api/session/{sid}/chapter/ch1/complete"), None)
+        .await;
+
+    // Complete chapter 2
+    h.post(&format!("/api/session/{sid}/chapter/ch2/complete"), None)
+        .await;
+
+    // Check progress has both chapters
+    let (_, body) = h.get(&format!("/api/session/{sid}/progress")).await;
+    let progress = body["progress"].as_array().unwrap();
+    assert_eq!(progress.len(), 2);
+}
+
+// ── Infeasible goal test ──
+
+#[tokio::test]
+async fn test_infeasible_goal_returns_to_goal_input() {
+    let mock = make_mock_provider();
+    // Override the first (feasibility) response to return infeasible
+    mock.replace_response(
+        0,
+        serde_json::json!({
+            "feasible": false,
+            "reason": "Goal is too broad. Please narrow your focus.",
+            "suggestions": ["Pick a specific language", "Focus on one project type"],
+            "estimated_duration": "N/A",
+            "prerequisites": []
+        })
+        .to_string(),
+    );
+
+    let h = TestHarness::with_mock_provider(mock).await;
+
+    let (_, body) = h.post("/api/session", None).await;
+    let sid = body["session_id"].as_str().unwrap();
+
+    let (status, body) = h
+        .post(
+            &format!("/api/session/{sid}/goal"),
+            Some(json!({"description": "Learn everything about computers", "domain": "computing"})),
+        )
+        .await;
+
+    assert_eq!(status, 200, "Should succeed but return infeasible");
+    assert_eq!(
+        body["state"], "GOAL_INPUT",
+        "Infeasible goal should return to GOAL_INPUT"
+    );
+    assert_eq!(body["feasibility"]["feasible"], false);
+}
+
+// ── Concurrent write tests ──
+
+#[tokio::test]
+async fn test_concurrent_question_asks() {
+    let h = TestHarness::new().await;
+    let sid = h.setup_learning().await;
+    let base = h.base_url.clone();
+
+    // 5 concurrent Q&A requests on the same session
+    let handles: Vec<_> = (0..5)
+        .map(|i| {
+            let url = format!("{base}/api/session/{sid}/chapter/ch1/ask");
+            let client = TestHarness::http_client();
+            let q = format!("Question {}", i);
+            tokio::spawn(async move {
+                client
+                    .post(&url)
+                    .json(&serde_json::json!({"question": q}))
+                    .send()
+                    .await
+            })
+        })
+        .collect();
+
+    let mut ok_count = 0;
+    for h in handles {
+        if let Ok(resp) = h.await.unwrap() {
+            if resp.status().is_success() {
+                ok_count += 1;
+            }
+        }
+    }
+
+    // At minimum, most requests should succeed
+    assert!(
+        ok_count >= 3,
+        "Expected at least 3 successful concurrent requests, got {ok_count}"
+    );
+}
+
+#[tokio::test]
+async fn test_concurrent_create_and_delete() {
+    let h = TestHarness::new().await;
+    let base = h.base_url.clone();
+    let client = TestHarness::http_client();
+
+    // Create session
+    let (_, body) = h.post("/api/session", None).await;
+    let sid = body["session_id"].as_str().unwrap().to_string();
+
+    // Concurrent read + delete
+    let read_url = format!("{base}/api/session/{sid}");
+    let delete_url = format!("{base}/api/session/{sid}");
+
+    let (read_resp, delete_resp) = tokio::join!(
+        client.get(&read_url).send(),
+        client.delete(&delete_url).send(),
+    );
+
+    // Both should complete without panic
+    let _ = (read_resp, delete_resp);
+
+    // After delete, session should be gone
+    let (status, _) = h.get(&format!("/api/session/{sid}")).await;
+    assert_eq!(status, 404);
 }

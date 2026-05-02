@@ -298,4 +298,106 @@ mod tests {
         let sm = StateMachine::default();
         assert_eq!(sm.current_state(), SessionState::Idle);
     }
+
+    /// Exhaustive test: verify every valid and invalid transition from every state.
+    #[test]
+    fn test_exhaustive_transition_matrix() {
+        use SessionState::*;
+        use Transition::*;
+
+        let valid = vec![
+            (Idle, SubmitGoal, GoalInput),
+            (GoalInput, SubmitGoal, FeasibilityCheck),
+            (FeasibilityCheck, GoalFeasible, ProfileCollection),
+            (FeasibilityCheck, GoalInfeasible, GoalInput),
+            (ProfileCollection, ProfileContinue, ProfileCollection),
+            (ProfileCollection, ProfileComplete, CurriculumPlanning),
+            (CurriculumPlanning, CurriculumReady, ChapterLearning),
+            (ChapterLearning, ChapterComplete, ChapterLearning),
+            (ChapterLearning, AllChaptersDone, Completed),
+            (Completed, Reset, Idle),
+        ];
+
+        for (from, transition, expected_to) in &valid {
+            let mut sm = StateMachine::with_state(*from);
+            match sm.transition(transition.clone()) {
+                Ok(to) => assert_eq!(
+                    to, *expected_to,
+                    "{from:?} + {transition:?} -> {to:?}, expected {expected_to:?}"
+                ),
+                Err(e) => panic!("{from:?} + {transition:?} should be valid, got: {e}"),
+            }
+        }
+
+        let all_states = [
+            Idle,
+            GoalInput,
+            FeasibilityCheck,
+            ProfileCollection,
+            CurriculumPlanning,
+            ChapterLearning,
+            Completed,
+            Error,
+        ];
+
+        let all_transitions = [
+            SubmitGoal,
+            GoalFeasible,
+            GoalInfeasible,
+            ProfileContinue,
+            ProfileComplete,
+            CurriculumReady,
+            ChapterComplete,
+            AllChaptersDone,
+            ErrorOccurred,
+            Retry,
+            Reset,
+        ];
+
+        for from in &all_states {
+            for t in &all_transitions {
+                let mut sm = StateMachine::with_state(*from);
+                let result = sm.transition(t.clone());
+                let is_valid = valid.iter().any(|(vf, vt, _)| vf == from && vt == t);
+
+                let always_ok = matches!(t, ErrorOccurred)
+                    || (matches!(t, Retry) && *from == Error)
+                    || (matches!(t, Reset) && (*from == Error || *from == Completed));
+
+                if is_valid || always_ok {
+                    assert!(
+                        result.is_ok(),
+                        "{from:?} + {t:?} should be valid, got: {result:?}"
+                    );
+                } else {
+                    assert!(
+                        result.is_err(),
+                        "{from:?} + {t:?} should be invalid, got: {result:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// ErrorOccurred can be called from any state and transitions to Error.
+    #[test]
+    fn test_error_from_all_non_error_states() {
+        use SessionState::*;
+        let states = [
+            Idle,
+            GoalInput,
+            FeasibilityCheck,
+            ProfileCollection,
+            CurriculumPlanning,
+            ChapterLearning,
+            Completed,
+        ];
+
+        for state in &states {
+            let mut sm = StateMachine::with_state(*state);
+            let result = sm.transition(Transition::ErrorOccurred);
+            assert!(result.is_ok(), "ErrorOccurred should work from {state:?}");
+            assert_eq!(sm.current_state(), Error);
+        }
+    }
 }

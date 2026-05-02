@@ -1,0 +1,14 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "chapter_id": "ch1",
+  "question": "What is 2+2?",
+  "exercise_type": {
+    "type": "multiple_choice",
+    "options": ["3", "4", "5"],
+    "correct_index": 1
+  },
+  "difficulty": "easy",
+  "max_score": 1.0,
+  "hints": ["Think about basic addition"],
+  "explanation": "2+2=4 is a basic arithmetic fact."
+}

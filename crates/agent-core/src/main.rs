@@ -55,10 +55,26 @@ async fn main() -> anyhow::Result<()> {
             .expect("Failed to create agent engine"),
     );
 
+    // Initialize storage
+    let storage_config =
+        storage::config::StorageConfig::sqlite(&config.data_dir.join("blup.db").to_string_lossy());
+    let storage = storage::Storage::connect(storage_config)
+        .await
+        .expect("Failed to connect to storage");
+    storage
+        .run_migrations()
+        .await
+        .expect("Failed to run storage migrations");
+
+    // Initialize assessment engine
+    let assessment = assessment_engine::AssessmentEngine::new();
+
     let app_state = AppState {
         config: Arc::new(config.clone()),
         store,
         agent,
+        storage,
+        assessment,
     };
 
     let router = server::router::build_router(app_state);

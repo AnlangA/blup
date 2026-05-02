@@ -1,7 +1,6 @@
 use axum::routing::{delete, get, post};
 use axum::Router;
 use tower_http::cors::CorsLayer;
-use tower_http::limit::RequestBodyLimitLayer;
 
 use super::handlers;
 use crate::AppState;
@@ -40,10 +39,14 @@ pub fn build_router(state: AppState) -> Router {
             post(handlers::complete_chapter),
         )
         .route(
+            "/api/session/:id/chapter/:ch_id/exercise/:ex_id/submit",
+            post(handlers::submit_exercise),
+        )
+        .route("/api/session/:id/progress", get(handlers::get_all_progress))
+        .route(
             "/api/session/:id/messages",
             get(handlers::get_messages_paginated),
         )
         .layer(CorsLayer::permissive())
-        .layer(RequestBodyLimitLayer::new(1024 * 1024))
         .with_state(state)
 }

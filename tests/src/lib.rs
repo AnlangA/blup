@@ -1,4 +1,7 @@
 #[cfg(test)]
+mod assessment;
+
+#[cfg(test)]
 mod common;
 
 #[cfg(test)]
@@ -8,4 +11,4 @@ mod contract;
 mod integration;
 
 #[cfg(test)]
-mod state;
+mod sandbox;

@@ -394,3 +394,228 @@ pub struct SessionListEntry {
     pub domain: String,
     pub updated_at: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::types::SessionState;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn test_create_and_get_session() {
+        let store = InMemorySessionStore::new();
+        let handle = store.create().await.unwrap();
+        let id = handle.read().await.id;
+
+        let retrieved = store.get(id).await.unwrap();
+        assert_eq!(retrieved.read().await.id, id);
+        assert_eq!(retrieved.read().await.state(), SessionState::Idle);
+    }
+
+    #[tokio::test]
+    async fn test_create_at_capacity_limit() {
+        let store = InMemorySessionStore::with_limit(3);
+        assert!(store.create().await.is_some());
+        assert!(store.create().await.is_some());
+        assert!(store.create().await.is_some());
+        // Next create should fail
+        assert!(store.create().await.is_none());
+        assert_eq!(store.count().await, 3);
+    }
+
+    #[tokio::test]
+    async fn test_delete_session() {
+        let store = InMemorySessionStore::new();
+        let handle = store.create().await.unwrap();
+        let id = handle.read().await.id;
+
+        store.delete(id).await;
+        assert!(store.get(id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_version_tracking() {
+        let store = InMemorySessionStore::new();
+        let handle = store.create().await.unwrap();
+        let id = handle.read().await.id;
+        assert_eq!(store.version(id).await, Some(0));
+
+        // try_mutate bumps version internally
+        store.try_mutate(id, 0, |s| s.state().to_string()).await;
+        assert_eq!(store.version(id).await, Some(1));
+    }
+
+    #[tokio::test]
+    async fn test_version_conflict_detection() {
+        let store = InMemorySessionStore::new();
+        let handle = store.create().await.unwrap();
+        let id = handle.read().await.id;
+
+        // First mutation succeeds
+        let result = store.try_mutate(id, 0, |_s| "ok").await;
+        assert_eq!(result, Some("ok"));
+
+        // Second mutation with stale version 0 fails (version is now 1)
+        let result = store.try_mutate(id, 0, |_s| "should_not_happen").await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_session_creates() {
+        let store = InMemorySessionStore::with_limit(100);
+        let mut handles = vec![];
+
+        for _ in 0..20 {
+            let s = store.clone();
+            handles.push(tokio::spawn(async move { s.create().await }));
+        }
+
+        let mut ids = Vec::new();
+        for h in handles {
+            if let Some(handle) = h.await.unwrap() {
+                ids.push(handle.read().await.id);
+            }
+        }
+
+        assert_eq!(ids.len(), 20);
+        // Verify all IDs are unique
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 20);
+    }
+
+    #[tokio::test]
+    async fn test_list_sessions() {
+        let store = InMemorySessionStore::new();
+        let handle1 = store.create().await.unwrap();
+        let handle2 = store.create().await.unwrap();
+        let id1 = handle1.read().await.id;
+        let id2 = handle2.read().await.id;
+
+        let list = store.list().await;
+        assert!(list.len() >= 2);
+
+        let ids: Vec<&str> = list.iter().map(|e| e.id.as_str()).collect();
+        assert!(ids.contains(&id1.to_string().as_str()));
+        assert!(ids.contains(&id2.to_string().as_str()));
+    }
+
+    #[tokio::test]
+    async fn test_disk_persistence_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_path = dir.path().to_path_buf();
+
+        // Create and populate a session
+        let store = InMemorySessionStore::with_limit(10).with_persistence(dir_path.clone());
+        let handle = store.create().await.unwrap();
+        let id = {
+            let mut s = handle.write().await;
+            s.goal = Some(LearningGoal {
+                description: "Learn Rust".to_string(),
+                domain: "programming".to_string(),
+                context: None,
+                current_level: None,
+            });
+            s.version = 5;
+            s.id
+        };
+        store.persist(id);
+
+        // Give persistence a moment
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Create a new store and load from disk
+        let store2 = InMemorySessionStore::with_limit(10).with_persistence(dir_path);
+        store2.load_from_disk().await;
+
+        let loaded = store2.get(id).await.unwrap();
+        let s = loaded.read().await;
+        assert_eq!(s.id, id);
+        assert!(s.goal.is_some());
+        assert_eq!(s.goal.as_ref().unwrap().description, "Learn Rust");
+    }
+
+    #[tokio::test]
+    async fn test_eviction_stale_sessions() {
+        let store = InMemorySessionStore::new();
+        let handle = store.create().await.unwrap();
+        let id = handle.read().await.id;
+
+        // Artificially age the session
+        {
+            let mut s = handle.write().await;
+            s.updated_at = chrono::Utc::now() - chrono::Duration::hours(48);
+        }
+
+        assert_eq!(store.count().await, 1);
+
+        // Start eviction with 1-hour TTL, 50ms interval
+        store.start_eviction_task(Duration::from_secs(3600), Duration::from_millis(50));
+
+        // Wait for eviction to fire
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Session should have been evicted
+        assert_eq!(store.count().await, 0);
+        assert!(store.get(id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_corrupt_snapshot_file_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_path = dir.path().to_path_buf();
+
+        // Write a valid session
+        let store = InMemorySessionStore::with_limit(10).with_persistence(dir_path.clone());
+        let handle = store.create().await.unwrap();
+        let id = handle.read().await.id;
+        store.persist(id);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Write a corrupt file alongside the valid one
+        let corrupt_path = dir_path.join("corrupt-session.json");
+        tokio::fs::write(&corrupt_path, "not valid json {{{")
+            .await
+            .unwrap();
+
+        // Load — should skip corrupt file and load valid one
+        let store2 = InMemorySessionStore::with_limit(10).with_persistence(dir_path);
+        store2.load_from_disk().await;
+        assert!(store2.get(id).await.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_persist_nonexistent_session_no_panic() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_path = dir.path().to_path_buf();
+        let store = InMemorySessionStore::with_limit(10).with_persistence(dir_path);
+
+        // Persisting a non-existent session should not panic
+        store.persist(uuid::Uuid::new_v4());
+        // Give async persist a moment
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    #[tokio::test]
+    async fn test_load_from_empty_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_path = dir.path().to_path_buf();
+        let store = InMemorySessionStore::with_limit(10).with_persistence(dir_path);
+        store.load_from_disk().await;
+        assert_eq!(store.count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_load_skips_non_json_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_path = dir.path().to_path_buf();
+        // Write a .txt file (should be ignored)
+        tokio::fs::write(dir_path.join("notes.txt"), "not json")
+            .await
+            .unwrap();
+
+        let store = InMemorySessionStore::with_limit(10).with_persistence(dir_path);
+        store.load_from_disk().await;
+        assert_eq!(store.count().await, 0);
+    }
+}

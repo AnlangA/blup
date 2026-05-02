@@ -1,0 +1,20 @@
+FROM python:3.12-slim
+
+# Create sandbox user
+RUN useradd -m -u 1000 sandbox
+
+# Install common packages for data analysis
+RUN pip install --no-cache-dir \
+    sympy==1.12.1 \
+    numpy==1.26.4 \
+    scipy==1.12.0 \
+    matplotlib==3.8.3
+
+# Switch to sandbox user
+USER sandbox
+
+# Set working directory
+WORKDIR /workspace
+
+# Default entrypoint
+ENTRYPOINT ["python", "-c"]

@@ -10,7 +10,7 @@ use blup_agent::AgentEngine;
 
 /// Create a mock provider preloaded with enough valid responses for the full
 /// learning flow. Each integration test gets a fresh instance.
-fn make_mock_provider() -> MockProvider {
+pub fn make_mock_provider() -> MockProvider {
     let mock = MockProvider::new();
     // Response 1: feasibility check
     mock.push_response(
@@ -97,6 +97,15 @@ pub struct TestHarness {
 
 impl TestHarness {
     pub async fn new() -> Self {
+        Self::build(make_mock_provider()).await
+    }
+
+    /// Create a harness with a custom mock provider (to test infeasible goals, etc.).
+    pub async fn with_mock_provider(mock: MockProvider) -> Self {
+        Self::build(mock).await
+    }
+
+    async fn build(mock: MockProvider) -> Self {
         let config = Config {
             ..Default::default()
         };
@@ -122,7 +131,6 @@ impl TestHarness {
             ..Default::default()
         };
 
-        let mock = make_mock_provider();
         let prompts = Arc::new(PromptLoader::new(&agent_config.prompts_dir));
         let validator = Arc::new(SchemaValidator::new(&agent_config.schemas_dir));
 
@@ -130,10 +138,18 @@ impl TestHarness {
             AgentEngine::with_provider(Arc::new(mock), prompts, validator, agent_config).await,
         );
 
+        let storage_config = storage::config::StorageConfig::sqlite(":memory:");
+        let storage = storage::Storage::connect(storage_config).await.unwrap();
+        storage.run_migrations().await.unwrap();
+
+        let assessment = assessment_engine::AssessmentEngine::new();
+
         let app_state = AppState {
             config: Arc::new(config),
             store,
             agent,
+            storage,
+            assessment,
         };
 
         let app = agent_core::server::router::build_router(app_state);
@@ -145,7 +161,12 @@ impl TestHarness {
             axum::serve(listener, app).await.unwrap();
         });
 
-        let http = reqwest::Client::new();
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let http = reqwest::Client::builder()
+            .no_proxy()
+            .build()
+            .expect("Failed to build HTTP client");
 
         Self {
             base_url,
@@ -168,6 +189,14 @@ impl TestHarness {
 
     pub async fn delete(&self, path: &str) -> (u16, serde_json::Value) {
         self.request("DELETE", path, None).await
+    }
+
+    /// Create a new reqwest client configured for test use (no proxy).
+    pub fn http_client() -> reqwest::Client {
+        reqwest::Client::builder()
+            .no_proxy()
+            .build()
+            .expect("Failed to build HTTP client")
     }
 
     /// Submit 3 profile answers to complete the profile collection flow.
