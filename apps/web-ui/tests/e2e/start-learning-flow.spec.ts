@@ -103,7 +103,7 @@ async function installApiMocks(page: Page) {
   await page.route(
     (url) => {
       const pathname = new URL(url).pathname;
-      return pathname === '/api/session' || pathname === '/api/sessions' || pathname.startsWith('/api/session/');
+      return pathname.startsWith('/api/');
     },
     async (route: Route) => {
       const request = route.request();
@@ -311,6 +311,62 @@ async function installApiMocks(page: Page) {
           }),
         });
         return;
+      }
+
+      // ---- Export endpoints (added in Phase 2.5) ----
+      if (extraPath.includes('/export/')) {
+        if (extraPath.endsWith('/typst')) {
+          return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              filename: 'export.typ',
+              typst_source: '#set page()\n= Test',
+              checksum: 'abc123',
+            }),
+          });
+        }
+        // PDF export (SSE)
+        const sseBody = [
+          { event: 'status', data: { state: 'rendering', message: 'Rendering...' } },
+          { event: 'status', data: { state: 'compiling', message: 'Compiling...' } },
+          { event: 'done', data: { result: {
+            filename: 'export.pdf',
+            pdf_base64: 'JVBERi0xLjQK',
+            checksum: 'pdf123',
+            size_bytes: 100,
+            page_count: 1,
+          }}},
+        ].map(e => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`).join('');
+
+        return route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: sseBody,
+        });
+      }
+
+      // ---- Sandbox endpoints (added in Phase 2.5) ----
+      if (url.pathname === '/api/sandbox/execute') {
+        const sseBody = [
+          { event: 'status', data: { state: 'running', message: 'Executing...' } },
+          { event: 'stdout', data: { content: 'mock output\n' } },
+          { event: 'done', data: { result: { exit_code: 0, duration_ms: 10 } } },
+        ].map(e => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`).join('');
+
+        return route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: sseBody,
+        });
+      }
+
+      if (url.pathname === '/api/sandbox/health') {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ healthy: true, images: [] }),
+        });
       }
 
       // Fallback

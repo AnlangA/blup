@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use sandbox_manager::models::limits::SandboxLimits;
 use sandbox_manager::models::request::ToolKind;
@@ -8,16 +9,40 @@ use crate::error::{DiagnosticSeverity, ExportError, TypstDiagnostic};
 use crate::models::document_artifact::DocumentArtifact;
 
 pub struct TypstCompiler {
-    sandbox: SandboxManager,
+    sandbox: Arc<SandboxManager>,
 }
 
 impl TypstCompiler {
-    pub fn new(sandbox: SandboxManager) -> Self {
+    pub fn new(sandbox: Arc<SandboxManager>) -> Self {
         Self { sandbox }
     }
 
-    /// Compile Typst source to PDF via sandbox
+    /// Compile Typst source to PDF via sandbox, with CLI fallback.
+    ///
+    /// Tries Docker sandbox first. If the sandbox is unavailable or compilation
+    /// fails, falls back to the host `typst` CLI. Returns `DocumentArtifact` on
+    /// success.
     pub async fn compile_to_pdf(
+        &self,
+        typst_source: &str,
+        assets: &HashMap<String, Vec<u8>>,
+    ) -> Result<DocumentArtifact, ExportError> {
+        match self.compile_via_sandbox(typst_source, assets).await {
+            Ok(artifact) => return Ok(artifact),
+            Err(sandbox_err) => {
+                tracing::warn!(
+                    error = %sandbox_err,
+                    "Sandbox compilation failed, trying host typst CLI"
+                );
+            }
+        }
+
+        // Fall back to host typst CLI
+        compile_via_cli(typst_source)
+    }
+
+    /// Compile Typst source to PDF via Docker sandbox.
+    async fn compile_via_sandbox(
         &self,
         typst_source: &str,
         assets: &HashMap<String, Vec<u8>>,
@@ -38,10 +63,19 @@ impl TypstCompiler {
             typst_source.as_bytes(),
         );
 
+        // Redirect typst stderr to a file instead of stdout — otherwise
+        // warnings (e.g. font fallback) mix with the base64 PDF and corrupt it.
+        // On failure the error file is piped to stderr so parse_typst_errors can read it.
         let command = format!(
             "{}echo '{}' | base64 -d > /workspace/input.typst && \
-             typst compile /workspace/input.typst /workspace/output.pdf 2>&1 && \
-             cat /workspace/output.pdf | base64",
+             typst compile /workspace/input.typst /workspace/output.pdf >/dev/null 2>/workspace/errors.txt; \
+             EXIT=$?; \
+             if [ $EXIT -eq 0 ]; then \
+               base64 /workspace/output.pdf; \
+             else \
+               cat /workspace/errors.txt >&2; \
+               exit $EXIT; \
+             fi",
             setup_commands, encoded_source,
         );
 
@@ -90,10 +124,12 @@ impl TypstCompiler {
 
                 Ok(artifact)
             }
-            ExecutionStatus::TimeoutCompile => Err(ExportError::CompilationFailed {
-                message: "Compilation timed out".to_string(),
-                diagnostics: Vec::new(),
-            }),
+            ExecutionStatus::TimeoutCompile | ExecutionStatus::TimeoutRun => {
+                Err(ExportError::CompilationFailed {
+                    message: "Compilation timed out".to_string(),
+                    diagnostics: Vec::new(),
+                })
+            }
             _ => {
                 let diagnostics = parse_typst_errors(&result.stderr);
                 Err(ExportError::CompilationFailed {
@@ -103,6 +139,53 @@ impl TypstCompiler {
             }
         }
     }
+}
+
+/// Compile Typst source to PDF using the host `typst` CLI.
+fn compile_via_cli(typst_source: &str) -> Result<DocumentArtifact, ExportError> {
+    let tmp_dir = tempfile::TempDir::new().map_err(|e| ExportError::Io(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        format!("Failed to create temp dir: {e}"),
+    )))?;
+
+    let input_path = tmp_dir.path().join("input.typ");
+    let output_path = tmp_dir.path().join("output.pdf");
+
+    std::fs::write(&input_path, typst_source).map_err(ExportError::Io)?;
+
+    let output = std::process::Command::new("typst")
+        .args([
+            "compile",
+            input_path.to_str().unwrap_or("input.typ"),
+            output_path.to_str().unwrap_or("output.pdf"),
+        ])
+        .output()
+        .map_err(|e| ExportError::CompilationFailed {
+            message: format!("Failed to run typst CLI: {e}"),
+            diagnostics: Vec::new(),
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let diagnostics = parse_typst_errors(&stderr);
+        return Err(ExportError::CompilationFailed {
+            message: "Host typst CLI compilation failed".to_string(),
+            diagnostics,
+        });
+    }
+
+    let pdf_data = std::fs::read(&output_path).map_err(ExportError::Io)?;
+
+    if pdf_data.len() < 5 || &pdf_data[..5] != b"%PDF-" {
+        return Err(ExportError::InvalidPdfOutput(
+            "CLI output does not start with %PDF-".to_string(),
+        ));
+    }
+
+    let page_count = count_pdf_pages(&pdf_data);
+    let mut artifact = DocumentArtifact::new_pdf(&pdf_data, typst_source);
+    artifact.page_count = Some(page_count);
+    Ok(artifact)
 }
 
 fn count_pdf_pages(data: &[u8]) -> u32 {
@@ -128,7 +211,7 @@ fn parse_typst_errors(stderr: &str) -> Vec<TypstDiagnostic> {
                 DiagnosticSeverity::Warning
             };
 
-            let message = line.splitn(2, ':').nth(1).unwrap_or("").trim().to_string();
+            let message = line.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string();
 
             let mut diagnostic = TypstDiagnostic {
                 severity,

@@ -23,6 +23,7 @@ impl TypstRenderer {
     pub fn render_markdown_to_typst(&self, markdown: &str) -> String {
         let parser = Parser::new(markdown);
         let mut output = String::new();
+        let mut in_code_block = false;
 
         for event in parser {
             match event {
@@ -55,9 +56,11 @@ impl TypstRenderer {
                     } else {
                         output.push_str("#raw(block: true, \"");
                     }
+                    in_code_block = true;
                 }
                 Event::End(TagEnd::CodeBlock) => {
                     output.push_str("\")");
+                    in_code_block = false;
                 }
                 Event::Start(Tag::List(Some(_))) => {
                     output.push_str("#enum(\n");
@@ -78,16 +81,16 @@ impl TypstRenderer {
                     output.push_str("],\n");
                 }
                 Event::Start(Tag::Emphasis) => {
-                    output.push('_');
+                    output.push_str("#emph[");
                 }
                 Event::End(TagEnd::Emphasis) => {
-                    output.push('_');
+                    output.push(']');
                 }
                 Event::Start(Tag::Strong) => {
-                    output.push('*');
+                    output.push_str("#strong[");
                 }
                 Event::End(TagEnd::Strong) => {
-                    output.push('*');
+                    output.push(']');
                 }
                 Event::Start(Tag::Link { dest_url, .. }) => {
                     output.push_str("#link(\"");
@@ -98,18 +101,49 @@ impl TypstRenderer {
                     output.push(']');
                 }
                 Event::InlineMath(math) => {
-                    output.push_str(&format!("${}$", math));
+                    output.push_str(&format!("${}$", fix_typst_math(&math)));
                 }
                 Event::DisplayMath(math) => {
-                    output.push_str(&format!("$ {} $", math));
+                    output.push_str(&format!("$ {} $", fix_typst_math(&math)));
                 }
                 Event::Text(text) => {
-                    // Escape Typst special characters
-                    let escaped = text
-                        .replace('#', "\\#")
-                        .replace('[', "\\[")
-                        .replace(']', "\\]");
-                    output.push_str(&escaped);
+                    if in_code_block {
+                        // Inside #raw("…") string — escape backslash and
+                        // double-quote so they don't break the Typst string.
+                        output.push_str(
+                            &text
+                                .replace('\\', "\\\\")
+                                .replace('"', "\\\""),
+                        );
+                    } else {
+                        // Escape Typst special characters in prose
+                        let escaped = text
+                            .replace('#', "\\#")
+                            .replace('[', "\\[")
+                            .replace(']', "\\]");
+                        output.push_str(&escaped);
+                    }
+                }
+                Event::Start(Tag::Table(alignments)) => {
+                    let cols = alignments.len();
+                    output.push_str(&format!("#table(\n  columns: {},\n", cols));
+                }
+                Event::End(TagEnd::Table) => {
+                    output.push_str(")\n");
+                }
+                Event::Start(Tag::TableHead) => {}
+                Event::End(TagEnd::TableHead) => {}
+                Event::Start(Tag::TableRow) => {
+                    output.push_str("  ");
+                }
+                Event::End(TagEnd::TableRow) => {
+                    output.push_str(",\n");
+                }
+                Event::Start(Tag::TableCell) => {
+                    output.push('[');
+                }
+                Event::End(TagEnd::TableCell) => {
+                    output.push(']');
                 }
                 Event::SoftBreak => {
                     output.push(' ');
@@ -121,7 +155,11 @@ impl TypstRenderer {
             }
         }
 
-        output
+        // Post-process: pulldown-cmark without the `math` feature emits $…$
+        // as Text events.  The $ is not escaped so Typst receives it as math
+        // markup.  Fix LaTeX math conventions (adjacent letters = multiplication)
+        // inside those spans.
+        fix_typst_math_spans(&output)
     }
 
     /// Render chapter data to Typst source
@@ -150,11 +188,9 @@ impl TypstRenderer {
   ],
 )
 
-#set text(font: ("Inter", "Noto Sans"), size: 11pt, lang: "en")
+#set text(size: 11pt, lang: "en")
 #set par(justify: true, leading: 0.6em)
 #set heading(numbering: "1.")
-
-#show math.equation: set text(font: ("New Computer Modern Math", "Latin Modern Math"))
 
 "#,
         );
@@ -271,7 +307,7 @@ impl TypstRenderer {
   ],
 )
 
-#set text(font: ("Inter", "Noto Sans"), size: 11pt)
+#set text(size: 11pt)
 
 "#,
         );
@@ -320,6 +356,184 @@ impl TypstRenderer {
     }
 }
 
+/// Scan Typst output for `$…$` math spans and fix LaTeX math conventions.
+///
+/// `#raw(…, […])` content blocks are protected first so that bare `$` inside
+/// code blocks is not misinterpreted as math delimiters.
+fn fix_typst_math_spans(text: &str) -> String {
+    // Protect #raw(…, […]) blocks with placeholders
+    let (protected, raw_blocks) = protect_raw_blocks(text);
+
+    let mut out = String::with_capacity(protected.len());
+    for line in protected.lines() {
+        let mut processed = String::with_capacity(line.len());
+        let chars: Vec<char> = line.chars().collect();
+        let n = chars.len();
+        let mut j = 0;
+
+        while j < n {
+            if chars[j] == '\\' && j + 1 < n && chars[j + 1] == '$' {
+                processed.push_str("\\$");
+                j += 2;
+                continue;
+            }
+
+            if chars[j] == '$' {
+                // Display math $$…$$
+                if j + 1 < n && chars[j + 1] == '$' {
+                    if let Some(end) = line[j + 2..].find("$$") {
+                        let body = &line[j + 2..j + 2 + end];
+                        processed.push_str(&format!("$ {} $", fix_typst_math(body)));
+                        j += 2 + end + 2;
+                        continue;
+                    }
+                }
+                // Inline math $…$
+                if let Some(end) = line[j + 1..].find('$') {
+                    let body = &line[j + 1..j + 1 + end];
+                    processed.push_str(&format!("${}$", fix_typst_math(body)));
+                    j += 1 + end + 1;
+                    continue;
+                }
+            }
+
+            processed.push(chars[j]);
+            j += 1;
+        }
+
+        out.push_str(&processed);
+        out.push('\n');
+    }
+
+    if !protected.ends_with('\n') && out.ends_with('\n') {
+        out.pop();
+    }
+
+    // Restore #raw(…) blocks
+    let mut result = out;
+    for (idx, block) in raw_blocks.iter().enumerate() {
+        result = result.replace(&format!("\x00RAW{}\x00", idx), block);
+    }
+    result
+}
+
+/// Find every `#raw(…, "…")` span (code block as string) and replace it
+/// with a placeholder.  Returns the modified text and the original block
+/// texts so that `$` inside code blocks is not misinterpreted as math.
+///
+/// We must track escaped characters (`\"`, `\\`) inside the string so that
+/// we correctly find the closing `"` that ends the raw content.
+fn protect_raw_blocks(text: &str) -> (String, Vec<String>) {
+    let mut blocks: Vec<String> = Vec::new();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+
+    while i < text.len() {
+        if text[i..].starts_with("#raw(") {
+            // Look for the string that holds the code content.
+            // #raw(block: true, "…") or #raw(lang: "…", block: true, "…")
+            // The last " argument before the closing ) is the code body.
+            // Find the last unescaped " before ) that ends the call.
+            if let Some(body_start) = find_raw_body_start(&text[i..]) {
+                let abs_start = i + body_start;
+                // body_start points to the opening " of the code string
+                // Now scan for closing " (unescaped)
+                let mut j = abs_start + 1;
+                let bytes = text.as_bytes();
+                while j < bytes.len() {
+                    if bytes[j] == b'\\' && j + 1 < bytes.len() {
+                        j += 2; // skip escaped char
+                        continue;
+                    }
+                    if bytes[j] == b'"' {
+                        // Found closing ". Expect ) to follow.
+                        let end = if j + 1 < bytes.len() && bytes[j + 1] == b')' {
+                            j + 1 // include )
+                        } else {
+                            j
+                        };
+                        let full = text[i..=end].to_string();
+                        blocks.push(full);
+                        out.push_str(&format!("\x00RAW{}\x00", blocks.len() - 1));
+                        i = end + 1;
+                        break;
+                    }
+                    j += 1;
+                }
+                if j < bytes.len() {
+                    continue; // already processed
+                }
+            }
+        }
+        // Copy one char forward
+        if let Some(c) = text[i..].chars().next() {
+            out.push(c);
+            i += c.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    (out, blocks)
+}
+
+/// Given text starting with `#raw(…`, find the byte offset of the opening
+/// `"` that starts the code body (the last string argument).
+fn find_raw_body_start(text: &str) -> Option<usize> {
+    // Skip "#raw("
+    let after_open = &text[5..];
+    // The code body string is the last "…" argument before the closing ).
+    // Walk from the end backwards to find the opening ".
+    let mut last_quote = None;
+    let bytes = after_open.as_bytes();
+    let mut j = 0;
+    while j < bytes.len() {
+        if bytes[j] == b'\\' && j + 1 < bytes.len() {
+            j += 2;
+            continue;
+        }
+        if bytes[j] == b'"' {
+            last_quote = Some(j);
+        }
+        j += 1;
+    }
+    last_quote.map(|pos| 5 + pos)
+}
+
+/// Adapt LaTeX-style math to Typst syntax.
+///
+/// Typst treats adjacent letters as a single variable identifier (e.g. `mc`
+/// is one variable), while LaTeX treats them as individual variables
+/// multiplied. Insert spaces between adjacent ASCII letters to preserve
+/// LaTeX semantics.
+///
+/// Also strips the backslash from LaTeX commands (`\sum` → `sum`,
+/// `\alpha` → `alpha`) since Typst math uses bare names.
+fn fix_typst_math(math: &str) -> String {
+    // Protect LaTeX commands: strip backslash and save as placeholder
+    // so that the letters inside the command name are not split apart
+    let re_cmd = regex::Regex::new(r"\\[a-zA-Z]+").unwrap();
+    let mut placeholders: Vec<String> = Vec::new();
+    let protected = re_cmd.replace_all(math, |caps: &regex::Captures| {
+        let name = caps[0][1..].to_string(); // drop leading backslash
+        placeholders.push(name);
+        format!("\x00{}\x00", placeholders.len() - 1)
+    });
+
+    // Insert spaces between adjacent ASCII letters
+    let re_letters = regex::Regex::new(r"([a-zA-Z])([a-zA-Z])").unwrap();
+    let mut result = re_letters
+        .replace_all(&protected, "$1 $2")
+        .to_string();
+
+    // Restore identifiers (now without backslash for Typst compatibility)
+    for (i, name) in placeholders.iter().enumerate() {
+        result = result.replace(&format!("\x00{}\x00", i), name);
+    }
+
+    result
+}
+
 fn escape_typst(text: &str) -> String {
     text.replace('#', "\\#")
         .replace('[', "\\[")
@@ -344,5 +558,70 @@ mod tests {
     fn test_escape_typst() {
         assert_eq!(escape_typst("hello #world"), "hello \\#world");
         assert_eq!(escape_typst("[test]"), "\\[test\\]");
+    }
+
+    #[test]
+    fn test_fix_typst_math() {
+        // Adjacent letters get spaces
+        assert_eq!(fix_typst_math("E = mc^2"), "E = m c^2");
+        // LaTeX commands: backslash stripped, name preserved as one token
+        assert_eq!(fix_typst_math(r"\alpha + \beta"), "alpha + beta");
+        assert_eq!(fix_typst_math(r"\sin x + \cos y"), "sin x + cos y");
+        // Multiple adjacent letters get split
+        assert_eq!(fix_typst_math("ab cd"), "a b c d");
+        // Inside braces, letters still get split; \frac becomes frac
+        assert_eq!(fix_typst_math(r"\frac{ab}{cd}"), "frac{a b}{c d}");
+    }
+
+    #[test]
+    fn test_math_and_code_blocks_render_without_delimiter_errors() {
+        let renderer = TypstRenderer::new();
+        let chapter = serde_json::json!({
+            "title": "Test",
+            "content": "# Math & Code\n\nInline math: $E = mc^2$\n\nDisplay: $$\\sum x_i$$\n\n```python\nprint(\"hello $world\")\nx = f\"${var}\"\n```\n\nAfter code: $a+b=c$.\n\n```sh\necho \"$HOME\"\n```",
+            "estimated_minutes": 10,
+            "objectives": [],
+            "prerequisites": [],
+            "key_concepts": [],
+            "exercises": []
+        });
+        let source = renderer.render_chapter(&chapter).unwrap();
+
+        // Math in prose should be fixed
+        assert!(source.contains("$E = m c^2$"), "inline math should get spaces");
+        assert!(source.contains("$a+b=c$"), "inline math after code block should work");
+
+        // Code block uses #raw("...") string with escaped quotes
+        assert!(source.contains("#raw(lang: \"python\", block: true, \""), "should use string block");
+        assert!(source.contains("print(\\\"hello"), "quotes in code should be escaped");
+
+        // Verify the raw block syntax is intact: should NOT have unescaped "
+        // inside #raw() strings (check that the #raw(...) blocks are well-formed)
+        // The Typst compiler can verify this — try compiling
+        let dir = tempfile::TempDir::new().unwrap();
+        let input = dir.path().join("input.typ");
+        let output = dir.path().join("output.pdf");
+        std::fs::write(&input, &source).unwrap();
+
+        let result = std::process::Command::new("typst")
+            .args(["compile", input.to_str().unwrap(), output.to_str().unwrap()])
+            .output();
+
+        match result {
+            Ok(out) if out.status.success() => {
+                let pdf = std::fs::read(&output).unwrap();
+                assert!(pdf.starts_with(b"%PDF-"), "should produce valid PDF");
+            }
+            Ok(out) => {
+                panic!(
+                    "typst compile failed:\nSTDERR:\n{}\n\nSOURCE (first 2000 chars):\n{}",
+                    String::from_utf8_lossy(&out.stderr),
+                    &source[..source.len().min(2000)]
+                );
+            }
+            Err(_e) => {
+                // typst not installed — skip compilation check
+            }
+        }
     }
 }

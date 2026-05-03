@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CompletionScreen } from '../../../src/components/session/CompletionScreen';
 
 vi.mock('../../../src/state/sessionStore', () => ({
@@ -23,21 +24,56 @@ vi.mock('../../../src/hooks/query', () => ({
     mutate: vi.fn(),
     isPending: false,
   }),
+  useExportChapterTypst: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
+  useExportCurriculumTypst: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
+  useExportChapterPdf: () => ({
+    exportPdf: vi.fn(),
+    isExporting: false,
+    error: null,
+    status: null,
+    message: null,
+    reset: vi.fn(),
+  }),
+  useExportCurriculumPdf: () => ({
+    exportPdf: vi.fn(),
+    isExporting: false,
+    error: null,
+    status: null,
+    message: null,
+    reset: vi.fn(),
+  }),
 }));
+
+function renderWithProviders(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
+}
 
 describe('CompletionScreen', () => {
   it('renders congratulations message', () => {
-    render(<CompletionScreen />);
+    renderWithProviders(<CompletionScreen />);
     expect(screen.getByText('Congratulations!')).toBeInTheDocument();
   });
 
   it('shows chapter count', () => {
-    render(<CompletionScreen />);
+    renderWithProviders(<CompletionScreen />);
     expect(screen.getByText(/2 chapters completed/)).toBeInTheDocument();
   });
 
   it('renders new plan button', () => {
-    render(<CompletionScreen />);
+    renderWithProviders(<CompletionScreen />);
     expect(
       screen.getByRole('button', { name: /start a new learning goal/i }),
     ).toBeInTheDocument();

@@ -49,6 +49,14 @@ export interface Chapter {
   order: number;
   objectives: string[];
   estimated_minutes?: number;
+  prerequisites?: string[];
+  key_concepts?: string[];
+  exercises?: Array<{
+    question?: string;
+    options?: string[];
+    type?: string;
+    [key: string]: unknown;
+  }>;
 }
 
 export interface CurriculumPlan {
@@ -101,6 +109,28 @@ export interface SessionSnapshot {
     timestamp: string;
     chapter_id?: string;
   }>;
+}
+
+export interface ExportResult {
+  filename: string;
+  checksum: string;
+  size_bytes?: number;
+  pdf_base64?: string;
+  typst_source?: string;
+  page_count?: number;
+}
+
+export interface SandboxExecuteRequest {
+  session_id: string;
+  language: "python" | "javascript" | "rust" | "typst";
+  code: string;
+  stdin?: string;
+  timeout_secs?: number;
+}
+
+export interface SandboxHealth {
+  healthy: boolean;
+  images: Array<{ name: string; version: string }>;
 }
 
 // ── Client ──
@@ -214,6 +244,95 @@ export class ApiClient {
   async deleteSession(sessionId: string): Promise<{ deleted: boolean }> {
     return this.request("DELETE", `/api/session/${sessionId}`);
   }
+
+  async exportChapterTypst(
+    sessionId: string,
+    chapterId: string,
+  ): Promise<ExportResult> {
+    return this.request(
+      "POST",
+      `/api/session/${sessionId}/export/chapter/${chapterId}/typst`,
+    );
+  }
+
+  async exportCurriculumTypst(sessionId: string): Promise<ExportResult> {
+    return this.request(
+      "POST",
+      `/api/session/${sessionId}/export/curriculum/typst`,
+    );
+  }
+
+  async getSandboxHealth(): Promise<SandboxHealth> {
+    return this.request("GET", "/api/sandbox/health");
+  }
 }
 
 export const api = new ApiClient();
+
+export async function downloadBlob(
+  data: Blob | string,
+  filename: string,
+  mimeType: string,
+) {
+  const blob =
+    data instanceof Blob ? data : new Blob([data], { type: mimeType });
+
+  // Use native File System Access API save dialog when available
+  if ("showSaveFilePicker" in window) {
+    try {
+      const ext = filename.split(".").pop() || "";
+      const types: FilePickerAcceptType[] = [
+        {
+          description:
+            ext === "pdf"
+              ? "PDF Document"
+              : ext === "typ"
+                ? "Typst Source"
+                : "Document",
+          accept: { [mimeType]: [`.${ext}`] },
+        },
+      ];
+
+      const handle = await (
+        window as Window & {
+          showSaveFilePicker: (opts: {
+            suggestedName: string;
+            types: FilePickerAcceptType[];
+          }) => Promise<{
+            createWritable: () => Promise<{
+              write: (data: Blob) => Promise<void>;
+              close: () => Promise<void>;
+            }>;
+          }>;
+        }
+      ).showSaveFilePicker({
+        suggestedName: filename,
+        types,
+      });
+
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        // User cancelled the save dialog — silently return
+        return;
+      }
+      // Fall through to legacy download on error
+    }
+  }
+
+  // Legacy fallback: trigger browser download
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+interface FilePickerAcceptType {
+  description: string;
+  accept: Record<string, string[]>;
+}

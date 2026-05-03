@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { api, downloadBlob } from "../api/client";
 import { sseClient } from "../api/sse";
 import type {
   LearningGoal,
@@ -9,6 +9,8 @@ import type {
   SessionListEntry,
   CurriculumPlan,
   ChapterContent,
+  ExportResult,
+  SandboxExecuteRequest,
 } from "../api/client";
 import { useSessionStore } from "../state/sessionStore";
 
@@ -347,4 +349,302 @@ export function useCompleteChapter(sessionId: string | null) {
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
     },
   });
+}
+
+// ── Export (Typst - sync mutation) ──
+
+export function useExportChapterTypst(
+  sessionId: string | null,
+  chapterId: string | null,
+) {
+  return useMutation({
+    mutationFn: () => api.exportChapterTypst(sessionId!, chapterId!),
+    onSuccess: (data: ExportResult) => {
+      if (data.typst_source) {
+        void downloadBlob(
+          data.typst_source,
+          data.filename || "chapter.typ",
+          "text/plain",
+        );
+      }
+    },
+  });
+}
+
+export function useExportCurriculumTypst(sessionId: string | null) {
+  return useMutation({
+    mutationFn: () => api.exportCurriculumTypst(sessionId!),
+    onSuccess: (data: ExportResult) => {
+      if (data.typst_source) {
+        void downloadBlob(
+          data.typst_source,
+          data.filename || "curriculum.typ",
+          "text/plain",
+        );
+      }
+    },
+  });
+}
+
+// ── Export (PDF - SSE streaming) ──
+
+interface PdfExportState {
+  status: string | null;
+  message: string | null;
+  isExporting: boolean;
+  error: string | null;
+  result: ExportResult | null;
+}
+
+type PdfExportAction =
+  | { type: "reset" }
+  | { type: "status"; state: string; message: string }
+  | { type: "done"; result: ExportResult }
+  | { type: "error"; message: string };
+
+function pdfExportReducer(
+  state: PdfExportState,
+  action: PdfExportAction,
+): PdfExportState {
+  switch (action.type) {
+    case "reset":
+      return {
+        status: null,
+        message: null,
+        isExporting: true,
+        error: null,
+        result: null,
+      };
+    case "status":
+      return { ...state, status: action.state, message: action.message };
+    case "done":
+      return { ...state, isExporting: false, result: action.result };
+    case "error":
+      return { ...state, isExporting: false, error: action.message };
+  }
+}
+
+export function useExportChapterPdf(
+  sessionId: string | null,
+  chapterId: string | null,
+) {
+  const [state, dispatch] = useReducer(pdfExportReducer, {
+    status: null,
+    message: null,
+    isExporting: false,
+    error: null,
+    result: null,
+  });
+  const sseRef = useRef(sseClient);
+
+  const exportPdf = useCallback(() => {
+    if (!sessionId || !chapterId) return;
+
+    sseRef.current.close();
+    dispatch({ type: "reset" });
+
+    const url = `/api/session/${sessionId}/export/chapter/${chapterId}/pdf`;
+    sseRef.current.connectPost(url, {}, {
+      onStatus: (st, msg) =>
+        dispatch({ type: "status", state: st, message: msg }),
+      onDone: (result) => {
+        const r = result as ExportResult;
+        dispatch({ type: "done", result: r });
+        if (r.pdf_base64) {
+          const byteChars = atob(r.pdf_base64);
+          const byteNums = new Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) {
+            byteNums[i] = byteChars.charCodeAt(i);
+          }
+          const pdfBytes = new Uint8Array(byteNums);
+          void downloadBlob(
+            new Blob([pdfBytes], { type: "application/pdf" }),
+            r.filename || "chapter.pdf",
+            "application/pdf",
+          );
+        }
+      },
+      onError: (_code, message) => {
+        dispatch({ type: "error", message });
+      },
+    });
+  }, [sessionId, chapterId]);
+
+  const reset = useCallback(() => {
+    sseRef.current.close();
+    dispatch({ type: "reset" });
+  }, []);
+
+  useEffect(() => {
+    const client = sseRef.current;
+    return () => {
+      client.close();
+    };
+  }, []);
+
+  return { ...state, exportPdf, reset };
+}
+
+export function useExportCurriculumPdf(sessionId: string | null) {
+  const [state, dispatch] = useReducer(pdfExportReducer, {
+    status: null,
+    message: null,
+    isExporting: false,
+    error: null,
+    result: null,
+  });
+  const sseRef = useRef(sseClient);
+
+  const exportPdf = useCallback(() => {
+    if (!sessionId) return;
+
+    sseRef.current.close();
+    dispatch({ type: "reset" });
+
+    const url = `/api/session/${sessionId}/export/curriculum/pdf`;
+    sseRef.current.connectPost(url, {}, {
+      onStatus: (st, msg) =>
+        dispatch({ type: "status", state: st, message: msg }),
+      onDone: (result) => {
+        const r = result as ExportResult;
+        dispatch({ type: "done", result: r });
+        if (r.pdf_base64) {
+          const byteChars = atob(r.pdf_base64);
+          const byteNums = new Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) {
+            byteNums[i] = byteChars.charCodeAt(i);
+          }
+          const pdfBytes = new Uint8Array(byteNums);
+          void downloadBlob(
+            new Blob([pdfBytes], { type: "application/pdf" }),
+            r.filename || "curriculum.pdf",
+            "application/pdf",
+          );
+        }
+      },
+      onError: (_code, message) => {
+        dispatch({ type: "error", message });
+      },
+    });
+  }, [sessionId]);
+
+  const reset = useCallback(() => {
+    sseRef.current.close();
+    dispatch({ type: "reset" });
+  }, []);
+
+  useEffect(() => {
+    const client = sseRef.current;
+    return () => {
+      client.close();
+    };
+  }, []);
+
+  return { ...state, exportPdf, reset };
+}
+
+// ── Sandbox Execution ──
+
+interface SandboxState {
+  stdout: string;
+  stderr: string;
+  status: string | null;
+  message: string | null;
+  isRunning: boolean;
+  error: string | null;
+  exitCode: number | null;
+  durationMs: number | null;
+}
+
+type SandboxAction =
+  | { type: "reset" }
+  | { type: "status"; state: string; message: string }
+  | { type: "stdout"; content: string }
+  | { type: "stderr"; content: string }
+  | { type: "done"; exitCode: number | null; durationMs: number | null }
+  | { type: "error"; message: string };
+
+function sandboxReducer(
+  state: SandboxState,
+  action: SandboxAction,
+): SandboxState {
+  switch (action.type) {
+    case "reset":
+      return {
+        stdout: "",
+        stderr: "",
+        status: null,
+        message: null,
+        isRunning: true,
+        error: null,
+        exitCode: null,
+        durationMs: null,
+      };
+    case "status":
+      return { ...state, status: action.state, message: action.message };
+    case "stdout":
+      return { ...state, stdout: state.stdout + action.content };
+    case "stderr":
+      return { ...state, stderr: state.stderr + action.content };
+    case "done":
+      return {
+        ...state,
+        isRunning: false,
+        exitCode: action.exitCode,
+        durationMs: action.durationMs,
+      };
+    case "error":
+      return { ...state, isRunning: false, error: action.message };
+  }
+}
+
+export function useSandboxExecute() {
+  const [state, dispatch] = useReducer(sandboxReducer, {
+    stdout: "",
+    stderr: "",
+    status: null,
+    message: null,
+    isRunning: false,
+    error: null,
+    exitCode: null,
+    durationMs: null,
+  });
+  const sseRef = useRef(sseClient);
+
+  const execute = useCallback((req: SandboxExecuteRequest) => {
+    sseRef.current.close();
+    dispatch({ type: "reset" });
+
+    sseRef.current.connectPost("/api/sandbox/execute", req, {
+      onStatus: (st, msg) =>
+        dispatch({ type: "status", state: st, message: msg }),
+      onStdout: (content) => dispatch({ type: "stdout", content }),
+      onStderr: (content) => dispatch({ type: "stderr", content }),
+      onDone: (result) => {
+        const r = result as { exit_code: number | null; duration_ms: number | null };
+        dispatch({
+          type: "done",
+          exitCode: r.exit_code,
+          durationMs: r.duration_ms,
+        });
+      },
+      onError: (_code, message) => {
+        dispatch({ type: "error", message });
+      },
+    });
+  }, []);
+
+  const reset = useCallback(() => {
+    sseRef.current.close();
+    dispatch({ type: "reset" });
+  }, []);
+
+  useEffect(() => {
+    const client = sseRef.current;
+    return () => {
+      client.close();
+    };
+  }, []);
+
+  return { ...state, execute, reset };
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkMath from 'remark-math';
@@ -9,6 +10,7 @@ import rehypeRaw from 'rehype-raw';
 import rehypeExpressiveCode from 'rehype-expressive-code';
 import rehypeStringify from 'rehype-stringify';
 import type { PluggableList } from 'unified';
+import { SandboxRunner, SUPPORTED_LANGUAGES } from '../sandbox/SandboxRunner';
 
 const CACHE_MAX = 20;
 const renderCache = new Map<string, string>();
@@ -53,6 +55,13 @@ function executeScripts(container: HTMLElement) {
   });
 }
 
+interface CodeBlock {
+  language: string;
+  code: string;
+  container: HTMLDivElement;
+  key: string;
+}
+
 interface MarkdownRendererProps {
   content: string;
 }
@@ -61,7 +70,9 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   const [html, setHtml] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [codeBlocks, setCodeBlocks] = useState<CodeBlock[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+  const portalCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,7 +98,13 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   useEffect(() => {
     if (containerRef.current) {
       executeScripts(containerRef.current);
+      injectSandboxContainers(containerRef.current, setCodeBlocks, portalCleanupRef);
     }
+    return () => {
+      if (portalCleanupRef.current) {
+        portalCleanupRef.current();
+      }
+    };
   }, [html]);
 
   if (loading) {
@@ -106,6 +123,110 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
     <div className="markdown-body">
       <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />
+      {codeBlocks.map((cb) =>
+        createPortal(
+          <SandboxRunner language={cb.language} code={cb.code} />,
+          cb.container,
+          cb.key,
+        ),
+      )}
     </div>
   );
+}
+
+function injectSandboxContainers(
+  container: HTMLElement,
+  setCodeBlocks: React.Dispatch<React.SetStateAction<CodeBlock[]>>,
+  cleanupRef: React.MutableRefObject<(() => void) | null>,
+) {
+  const blocks: CodeBlock[] = [];
+  let id = 0;
+
+  // rehype-expressive-code v0.41+ wraps code in <div class="expressive-code">
+  // containing <figure class="frame"> with <pre data-language="xxx"><code>.
+  // Also handle older <figure class="expressive-code"> and plain <pre><code class="language-xxx">.
+  const ecWrappers = container.querySelectorAll(
+    'div.expressive-code, figure.expressive-code, figure[class*="expressive"]',
+  );
+  ecWrappers.forEach((wrapper) => {
+    const codeEl = wrapper.querySelector('code');
+    if (!codeEl) return;
+
+    // Determine language: prefer data-language on <pre>, fall back to
+    // language-xxx class on <code> for older rehype-expressive-code versions.
+    let lang = '';
+    const pre = wrapper.querySelector('pre[data-language]');
+    if (pre) {
+      lang = pre.getAttribute('data-language') || '';
+    }
+    if (!lang) {
+      const classList = codeEl.className.split(/\s+/);
+      const langClass = classList.find((c) => c.startsWith('language-'));
+      lang = langClass ? langClass.replace('language-', '') : '';
+    }
+
+    const normalized = SUPPORTED_LANGUAGES[lang.toLowerCase()];
+    if (!normalized) return;
+
+    const code = codeEl.textContent || '';
+    if (code.trim().length === 0) return;
+
+    const portalDiv = document.createElement('div');
+    portalDiv.className = 'sandbox-runner-portal';
+    wrapper.insertAdjacentElement('afterend', portalDiv);
+
+    blocks.push({
+      language: lang,
+      code,
+      container: portalDiv,
+      key: `sandbox-${id++}`,
+    });
+  });
+
+  // Handle plain <pre><code class="language-xxx"> not already wrapped
+  const handledPres = new Set<Element>();
+  ecWrappers.forEach((w) => {
+    w.querySelectorAll('pre').forEach((p) => handledPres.add(p));
+  });
+  container.querySelectorAll('pre').forEach((pre) => {
+    if (handledPres.has(pre)) return;
+    const codeEl = pre.querySelector('code');
+    if (!codeEl) return;
+
+    const classList = codeEl.className.split(/\s+/);
+    const langClass = classList.find((c) => c.startsWith('language-'));
+    const lang = langClass ? langClass.replace('language-', '') : '';
+    const normalized = SUPPORTED_LANGUAGES[lang.toLowerCase()];
+    if (!normalized) return;
+
+    const code = codeEl.textContent || '';
+    if (code.trim().length === 0) return;
+
+    const portalDiv = document.createElement('div');
+    portalDiv.className = 'sandbox-runner-portal';
+    pre.insertAdjacentElement('afterend', portalDiv);
+
+    blocks.push({
+      language: lang,
+      code,
+      container: portalDiv,
+      key: `sandbox-${id++}`,
+    });
+  });
+
+  // Clean up previous portal divs
+  if (cleanupRef.current) {
+    cleanupRef.current();
+  }
+
+  const cleanup = () => {
+    blocks.forEach((b) => {
+      if (b.container.parentElement) {
+        b.container.remove();
+      }
+    });
+  };
+  cleanupRef.current = cleanup;
+
+  setCodeBlocks(blocks);
 }

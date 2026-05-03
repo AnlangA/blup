@@ -9,6 +9,8 @@ export interface SSEHandlers {
   onDone?: (result: unknown) => void;
   onError?: (code: string, message: string) => void;
   onPing?: () => void;
+  onStdout?: (content: string) => void;
+  onStderr?: (content: string) => void;
 }
 
 /**
@@ -75,6 +77,16 @@ export class SSEClient {
 
     es.addEventListener('ping', () => {
       handlers.onPing?.();
+    });
+
+    es.addEventListener('stdout', (e: MessageEvent) => {
+      const d = JSON.parse(e.data);
+      handlers.onStdout?.(d.content);
+    });
+
+    es.addEventListener('stderr', (e: MessageEvent) => {
+      const d = JSON.parse(e.data);
+      handlers.onStderr?.(d.content);
     });
   }
 
@@ -188,6 +200,12 @@ export class SSEClient {
           break;
         case 'ping':
           handlers.onPing?.();
+          break;
+        case 'stdout':
+          handlers.onStdout?.(parsed.content);
+          break;
+        case 'stderr':
+          handlers.onStderr?.(parsed.content);
           break;
       }
     } catch {

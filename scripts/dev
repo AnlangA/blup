@@ -65,7 +65,8 @@ if $WITH_GATEWAY || $GATEWAY_ONLY; then
     echo ""
     echo "--- LLM Gateway ---"
 
-    lsof -ti:9000 2>/dev/null | xargs kill 2>/dev/null || true
+    lsof -ti:9000 2>/dev/null | xargs kill -9 2>/dev/null || true
+    sleep 1  # Wait for port to be released
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy 2>/dev/null || true
 
     GATEWAY_DIR="$PROJECT_DIR/services/llm-gateway"

@@ -122,4 +122,6 @@ pub struct AppState {
     pub agent: Arc<blup_agent::AgentEngine>,
     pub storage: storage::Storage,
     pub assessment: assessment_engine::AssessmentEngine,
+    pub content_pipeline: Arc<content_pipeline::ContentPipeline>,
+    pub sandbox_manager: Arc<sandbox_manager::SandboxManager>,
 }

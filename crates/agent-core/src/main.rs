@@ -69,12 +69,58 @@ async fn main() -> anyhow::Result<()> {
     // Initialize assessment engine
     let assessment = assessment_engine::AssessmentEngine::new();
 
+    // Initialize content pipeline
+    let content_pipeline = Arc::new(content_pipeline::ContentPipeline::new());
+
+    // Initialize sandbox manager (use mock when BLUP_SANDBOX_MOCK=true)
+    let sandbox_manager = if std::env::var("BLUP_SANDBOX_MOCK").as_deref() == Ok("true") {
+        tracing::info!("Using MockExecutor for sandbox (BLUP_SANDBOX_MOCK=true)");
+        let mut mock = sandbox_manager::MockExecutor::success_default();
+        mock.set_response_fn(Box::new(|req| {
+            use sandbox_manager::models::request::ToolKind;
+            use sandbox_manager::models::result::SandboxResult;
+            use sandbox_manager::models::status::ExecutionStatus;
+            use sandbox_manager::models::result::ResourceUsage;
+
+            let stdout = if req.tool_kind == ToolKind::TypstCompile {
+                // Return a minimal valid PDF so the export flow works without Docker
+                let pdf = b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer\n<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF\n";
+                use base64::Engine;
+                base64::engine::general_purpose::STANDARD.encode(pdf)
+            } else {
+                "mock output\n".to_string()
+            };
+
+            SandboxResult {
+                request_id: req.request_id,
+                session_id: Some(req.session_id),
+                status: ExecutionStatus::Success,
+                exit_code: Some(0),
+                stdout,
+                stderr: String::new(),
+                stdout_truncated: false,
+                stderr_truncated: false,
+                duration_ms: 100,
+                resource_usage: ResourceUsage::default(),
+                error: None,
+            }
+        }));
+        Arc::new(sandbox_manager::SandboxManager::with_executor(Box::new(
+            mock,
+        )))
+    } else {
+        let sandbox_config = sandbox_manager::SandboxConfig::default();
+        Arc::new(sandbox_manager::SandboxManager::new(sandbox_config))
+    };
+
     let app_state = AppState {
         config: Arc::new(config.clone()),
         store,
         agent,
         storage,
         assessment,
+        content_pipeline,
+        sandbox_manager,
     };
 
     let router = server::router::build_router(app_state);

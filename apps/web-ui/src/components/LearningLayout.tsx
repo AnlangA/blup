@@ -5,6 +5,7 @@ import { useStreamChapter } from "../hooks/streaming";
 import { CurriculumSidebar } from "./curriculum/CurriculumSidebar";
 import { ChatWindow } from "./chat/ChatWindow";
 import { MarkdownRenderer } from "./content/MarkdownRenderer";
+import { ExportButton } from "./export/ExportButton";
 
 const SIDEBAR_DEFAULT = 260;
 const SIDEBAR_MIN = 180;
@@ -96,6 +97,9 @@ export function LearningLayout() {
               {streamState.isStreaming && !cachedChapter?.content && (
                 <div className="streaming-indicator">Streaming...</div>
               )}
+              <div className="chapter-toolbar">
+                <ExportButton chapterId={currentChapterId} variant="text" />
+              </div>
               <MarkdownRenderer content={chapterContent} />
             </>
           ) : (

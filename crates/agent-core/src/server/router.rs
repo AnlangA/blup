@@ -47,6 +47,24 @@ pub fn build_router(state: AppState) -> Router {
             "/api/session/:id/messages",
             get(handlers::get_messages_paginated),
         )
+        .route(
+            "/api/session/:id/export/chapter/:ch_id/pdf",
+            post(handlers::export_chapter_pdf_stream),
+        )
+        .route(
+            "/api/session/:id/export/chapter/:ch_id/typst",
+            post(handlers::export_chapter_typst),
+        )
+        .route(
+            "/api/session/:id/export/curriculum/pdf",
+            post(handlers::export_curriculum_pdf_stream),
+        )
+        .route(
+            "/api/session/:id/export/curriculum/typst",
+            post(handlers::export_curriculum_typst),
+        )
+        .route("/api/sandbox/execute", post(handlers::sandbox_execute_stream))
+        .route("/api/sandbox/health", get(handlers::sandbox_health))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }

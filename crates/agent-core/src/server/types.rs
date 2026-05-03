@@ -30,4 +30,19 @@ pub enum SseEvent {
     Done { result: serde_json::Value },
     #[serde(rename = "ping")]
     Ping {},
+    #[serde(rename = "stdout")]
+    Stdout { content: String },
+    #[serde(rename = "stderr")]
+    Stderr { content: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxExecuteRequest {
+    pub session_id: String,
+    pub language: String,
+    pub code: String,
+    #[serde(default)]
+    pub stdin: Option<String>,
+    #[serde(default)]
+    pub timeout_secs: Option<u64>,
 }

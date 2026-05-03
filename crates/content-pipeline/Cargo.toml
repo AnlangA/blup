@@ -55,6 +55,8 @@ encoding_rs = "0.8"
 # Base64 (for sandbox communication)
 base64 = "0.22"
 
-[dev-dependencies]
+# also used in CLI fallback for TypstCompiler
 tempfile = "3"
+
+[dev-dependencies]
 tokio-test = "0.4"

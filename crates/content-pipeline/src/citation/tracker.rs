@@ -48,7 +48,7 @@ impl CitationTracker {
 
         self.citations
             .entry(target_message_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(citation);
     }
 

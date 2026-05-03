@@ -1,5 +1,6 @@
 import { useSessionStore } from '../../state/sessionStore';
 import { useCurriculum, useCreatePlan } from '../../hooks/query';
+import { ExportButton } from '../export/ExportButton';
 
 export function CompletionScreen() {
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -18,6 +19,7 @@ export function CompletionScreen() {
         </p>
       )}
       <div className="actions">
+        <ExportButton variant="text" />
         <button
           onClick={() => createPlan.mutate()}
           disabled={createPlan.isPending}

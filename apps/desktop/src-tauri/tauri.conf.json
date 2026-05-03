@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:3000 http://localhost:9000; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self'"
+      "csp": null
     }
   },
   "bundle": {
@@ -41,10 +41,5 @@
     "shortDescription": "AI interactive learning agent",
     "longDescription": "Blup is an AI interactive learning-agent platform that creates personalized curricula and teaches through structured dialogue."
   },
-  "plugins": {
-    "updater": {
-      "endpoints": ["https://releases.blup.dev/{{target}}/{{current_version}}"],
-      "pubkey": "<update-public-key>"
-    }
-  }
+  "plugins": {}
 }

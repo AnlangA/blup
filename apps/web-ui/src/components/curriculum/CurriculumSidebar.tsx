@@ -6,6 +6,7 @@ import {
   usePrefetchChapters,
 } from '../../hooks/query';
 import type { Chapter } from '../../api/client';
+import { ExportButton } from '../export/ExportButton';
 
 export function CurriculumSidebar() {
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -57,14 +58,17 @@ export function CurriculumSidebar() {
     <aside className="curriculum-sidebar">
       <div className="sidebar-title-row">
         <h2>Curriculum</h2>
-        <select
-          className="theme-selector"
-          value={codeTheme}
-          onChange={(e) => setCodeTheme(e.target.value as CodeTheme)}
-        >
-          <option value="github-dark">Dark</option>
-          <option value="github-light">Light</option>
-        </select>
+        <div className="sidebar-title-actions">
+          <ExportButton />
+          <select
+            className="theme-selector"
+            value={codeTheme}
+            onChange={(e) => setCodeTheme(e.target.value as CodeTheme)}
+          >
+            <option value="github-dark">Dark</option>
+            <option value="github-light">Light</option>
+          </select>
+        </div>
       </div>
       <ul>
         {chapters

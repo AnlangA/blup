@@ -18,7 +18,7 @@ fn main() {
         .setup(|app| {
             let state = AppState::new();
             app.manage(state);
-            tracing::info!("Blup desktop started. Agent-core should be running on localhost:3000");
+            tracing::info!("Blup desktop started");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -27,6 +27,7 @@ fn main() {
             blup_desktop::commands::export::export_chapter_pdf,
             blup_desktop::commands::export::export_curriculum_pdf,
             blup_desktop::commands::export::export_typst,
+            blup_desktop::commands::export::export_curriculum_typst,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
