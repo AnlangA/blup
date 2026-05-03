@@ -877,44 +877,89 @@ button.secondary {
 .sandbox-runner {
   margin: 0.5rem 0 1rem;
 }
-
 .sandbox-runner-portal {
   margin: 0;
 }
-
+.sandbox-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.sandbox-toolbar-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+.sandbox-lang-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
 .sandbox-run-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.6rem;
-  border: 1px solid var(--color-border);
-  border-radius: 5px;
-  background: var(--color-bg);
+  gap: 0.3rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--color-success);
+  border-radius: 6px;
+  background: transparent;
   color: var(--color-success);
   font-size: 0.78rem;
+  font-weight: 500;
   cursor: pointer;
-  width: auto;
-  transition: border-color 0.15s, background 0.15s;
+  transition: all 0.15s;
 }
-
 .sandbox-run-btn:hover:not(:disabled) {
   border-color: var(--color-success);
   background: rgba(16, 185, 129, 0.05);
 }
-
 .sandbox-run-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }
-
+.sandbox-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sandbox-edit-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 .sandbox-spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid var(--color-border);
-  border-top-color: var(--color-success);
+  border: 2px solid var(--color-success);
+  border-top-color: transparent;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  display: inline-block;
+  animation: sandbox-spin 0.6s linear infinite;
+}
+@keyframes sandbox-spin {
+  to { transform: rotate(360deg); }
+}
+.sandbox-cm-editor {
+  margin: 0;
+}
+.sandbox-cm-editor .cm-editor {
+  border-radius: 6px;
+  overflow: hidden;
+}
+.sandbox-cm-editor .cm-editor.cm-focused {
+  outline: none;
 }
 
 .sandbox-output {

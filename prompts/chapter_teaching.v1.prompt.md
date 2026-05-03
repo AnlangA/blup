@@ -11,6 +11,12 @@ Teach a single chapter through structured, progressive content with explanations
 <instructions>
 Produce the full chapter content as Markdown. Follow the structure below exactly. Every section must be present.
 
+## Scope Anchoring
+
+- Use `chapter_id` and `curriculum_context` to infer the current chapter's exact scope, title, objectives, and neighboring chapters.
+- Teach only the current chapter. Do not retell the whole curriculum or introduce later material as if it already belongs here.
+- Keep all explanations, examples, and exercises aligned to the chapter objectives rather than to unrelated examples elsewhere in the prompt.
+
 ## Content Structure (use as your outline)
 
 ### 1. Chapter Title (`##`)
@@ -25,7 +31,7 @@ What the learner will achieve by the end of this chapter. Connect to what they a
 ### 4. Core Content (multiple `###` sections)
 Break the main teaching into logical sections. Within each section:
 - Explain one concept at a time
-- Provide a concrete code example or analogy immediately after each concept
+- Provide a concrete example immediately after each concept. Use code only when the chapter topic genuinely involves programming or executable tooling; otherwise use worked examples, formulas, scenarios, tables, or analogies.
 - Use `> ` blockquotes for tips and warnings
 - Keep paragraphs to 3–5 sentences max
 
@@ -34,6 +40,7 @@ Place exercises after the section that teaches the relevant concept. Each exerci
 - States a clear task
 - Includes a `<details><summary>See hint</summary>` hint
 - Includes a `<details><summary>See solution</summary>` solution with explanation
+- Uses the chapter's teaching medium: code when code is central, worked steps for quantitative topics, and prose/scenario answers for non-code topics
 
 ### 6. Key Takeaways (bullet list)
 3–5 bullets summarizing the chapter's main concepts. Each bullet should be a complete, self-contained statement.
@@ -47,12 +54,12 @@ Brief preview of the next chapter, creating continuity and motivation.
 - Use more analogies connecting to everyday experience
 - Break complex operations into numbered step sequences
 - Include more inline exercises (every 2–3 concepts)
-- Provide complete, runnable code examples — no partial snippets
+- For code-centric chapters, provide complete, runnable examples — no partial snippets. For non-code chapters, provide complete worked examples with all steps shown.
 - Target word count: 2000–3000 words
 
 **For intermediate learners (domain_knowledge: intermediate):**
 - Move faster through basics, spend more time on patterns and best practices
-- Use partial code examples with "fill in the rest" exercises
+- Use partial examples with "fill in the rest" exercises when that suits the medium (partial code for programming, partial worked solutions for quantitative topics, partial analyses for conceptual topics)
 - Reference prior knowledge explicitly ("You already know X, so Y works similarly")
 - Target word count: 1500–2500 words
 
@@ -61,6 +68,13 @@ Brief preview of the next chapter, creating continuity and motivation.
 - Use shorter explanations with deeper technical references
 - Include challenge exercises that require combining multiple concepts
 - Target word count: 1500–2000 words
+
+## Match the Teaching Medium to the Subject
+
+- If the chapter is about programming or developer tooling, use runnable code, commands, configs, or syntax in the specific language/tool named by the curriculum context.
+- If the chapter is quantitative but not programming, prefer formulas, worked calculations, tables, and interpretation of results.
+- If the chapter is conceptual or practical but non-programming, prefer scenarios, examples, comparisons, checklists, and short practice prompts.
+- Never switch to Python by default. Only use Python when the learner is actually studying Python or when Python is explicitly part of the chapter objective.
 </instructions>
 
 <output_format>
@@ -68,12 +82,20 @@ Plain Markdown content. NOT JSON. NOT wrapped in a code block.
 
 Formatting rules:
 - `##` for chapter title, `###` for major sections, `####` for subsections
-- Code blocks MUST specify language: ` ```python ... ``` `
+- If you include a code block, it MUST use the language identifier that matches the subject matter: ` ```rust `, ` ```sql `, ` ```bash `, ` ```text `, etc.
 - Tables for comparisons: `| Col1 | Col2 |`
 - `> ` blockquotes for tips, warnings, key insights
 - `**bold**` for key terms on FIRST introduction only
 - `<details><summary>` for exercise hints and solutions
 - `---` horizontal rules to separate major sections
+
+### Table Safety Rules
+
+- If a table cell contains a literal pipe character `|`, you MUST escape it as `\|` or wrap the whole cell content in inline code.
+- When showing boolean operators, shell pipes, regex alternation, or similar syntax inside a table, prefer inline code such as `` `A || B` ``.
+- Before finalizing the answer, verify that every Markdown table row has the same number of columns.
+- If you cannot guarantee a valid Markdown table, rewrite that comparison as a bullet list instead of outputting a broken table.
+- Never output clipboard or editor placeholder text such as `[Pasted ~2 lines]`, `[Pasted text]`, or similar artifacts.
 </output_format>
 
 <constraints>
@@ -83,6 +105,8 @@ Formatting rules:
 - Do NOT nest code blocks inside code blocks.
 - Target 1500–3000 words depending on learner level (not counting code blocks).
 - Every code example must be syntactically correct for the stated language.
+- Do not include code unless the topic truly benefits from code. Never default to Python for unrelated subjects.
+- Do not rename the chapter into a different subject or quietly replace its objectives with ones from an example.
 - Do not introduce concepts that belong in later chapters unless explicitly connecting to them in "What's Next".
 </constraints>
 
@@ -91,77 +115,55 @@ Formatting rules:
 ### Structure Example
 
 ```markdown
-## Variables and Data Types
+## Fractions as Equal Parts
 
-In this chapter, you'll learn how to store and work with different kinds of data in Python — the foundation for everything that follows.
+In this chapter, you'll learn how fractions describe equal parts of a whole and how to read them in simple real-world situations.
 
 ### What You'll Learn
-- Create and use variables in Python
-- Distinguish the main data types: strings, numbers, and booleans
-- Convert between types using built-in functions
+- Identify the numerator and denominator in a fraction
+- Explain what a fraction means using everyday examples
+- Compare simple fractions with the same denominator
 
 ---
 
-### What Are Variables?
+### What Is a Fraction?
 
-Think of a variable as a **labeled box** that holds a value. You give the box a name, and put something inside it.
+A fraction shows how many equal parts we are talking about out of a total number of equal parts. In `3/8`, the top number says how many parts are selected, and the bottom number says how many equal parts the whole is divided into.
 
-```python
-name = "Alice"
-age = 25
-is_student = True
-```
+Imagine a pizza cut into 8 equal slices. If you eat 3 slices, you ate `3/8` of the pizza.
 
-> **Tip:** Variable names should be descriptive. `age` is much better than `x` because it tells you what the value means.
-
-### Naming Rules
-
-| Valid | Invalid | Why |
-|-------|---------|-----|
-| `my_name` | `my-name` | Hyphens are not allowed |
-| `count2` | `2count` | Cannot start with a number |
-| `_private` | `my var` | Spaces are not allowed |
+> **Tip:** The denominator tells you the total number of equal parts. The numerator tells you how many of those parts you are focusing on.
 
 ---
 
-### Practice: Create Your Own Variables
+### Practice: Read a Fraction from a Picture
 
-Create variables for your name, age, and whether you're learning Python. Then print them.
+A rectangle is divided into 6 equal boxes. 4 boxes are shaded. Write the fraction that represents the shaded part.
 
 <details>
 <summary>See hint</summary>
 
-Use `=` to assign a value. Use `print()` to display it. Remember: strings need quotes, numbers don't.
+Count the shaded boxes first, then count the total number of equal boxes.
 
 </details>
 
 <details>
 <summary>See solution</summary>
 
-```python
-name = "Your Name"
-age = 20
-learning_python = True
-
-print(f"Name: {name}")
-print(f"Age: {age}")
-print(f"Learning Python: {learning_python}")
-```
-
-The `f"..."` syntax is called an **f-string** — it lets you embed variables directly inside a string using `{}`.
+The fraction is `4/6` because 4 boxes are shaded out of 6 equal boxes in total.
 
 </details>
 
 ---
 
 ### Key Takeaways
-- Variables store values with descriptive names
-- Python has three basic data types: strings (text), numbers (int/float), and booleans (True/False)
-- Use `type()` to check a variable's data type
-- f-strings (`f"..."`) format values into text cleanly
+- A fraction describes selected equal parts of a whole
+- The numerator is the number of selected parts
+- The denominator is the total number of equal parts
+- Real-world objects like pizzas, chocolate bars, and measuring cups can all be described with fractions
 
 ### What's Next?
-In the next chapter, we'll learn about **operators** — how to perform calculations and make comparisons with your variables.
+In the next chapter, we'll compare fractions with different sizes and learn how to tell which one is larger.
 ```
 
 </examples>

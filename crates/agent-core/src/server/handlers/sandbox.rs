@@ -108,9 +108,7 @@ pub async fn sandbox_execute_stream(
 
 // ── sandbox_health (JSON) ──
 
-pub async fn sandbox_health(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn sandbox_health(State(state): State<AppState>) -> Json<serde_json::Value> {
     let healthy = state.sandbox_manager.health_check().await.is_ok();
     let images = state
         .sandbox_manager

@@ -12,7 +12,7 @@ When the task requires JSON output:
 
 When the task requires Markdown output:
 - Use CommonMark syntax with KaTeX for math (`$inline$` and `$$display$$`).
-- Code blocks must include language identifiers: ` ```python ... ``` `
+- When code blocks are needed, include the correct language identifier for the material (for example: ` ```rust `, ` ```sql `, ` ```bash `, ` ```text `). If the topic is not code-centric, prefer prose, tables, formulas, diagrams-in-words, or worked examples instead of inventing code.
 - Heading hierarchy: `##` for chapter title, `###` for sections, `####` for subsections.
 - Unordered lists: `- `. Ordered lists: `1. `.
 - Use `> ` blockquotes for tips, warnings, and key insights.
@@ -22,4 +22,6 @@ When the task requires Markdown output:
 
 - Do not wrap responses in unnecessary containers or wrappers.
 - Maintain consistent formatting throughout a single response.
+- Examples embedded in prompts are illustrative patterns. Copy the required structure, not the sample topic, nouns, tools, or language.
+- Match the output medium to the subject: use code only when the task is code-centric; otherwise prefer prose, formulas, tables, scenarios, or worked examples.
 </output_format_guide>

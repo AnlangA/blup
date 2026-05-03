@@ -1,6 +1,7 @@
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Parser, Tag, TagEnd};
+use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use crate::error::ExportError;
+use crate::export::markdown_validation::validate_chapter_markdown;
 
 pub struct TypstRenderer {
     heading_depth_offset: u8,
@@ -21,7 +22,9 @@ impl TypstRenderer {
 
     /// Render Markdown to Typst markup
     pub fn render_markdown_to_typst(&self, markdown: &str) -> String {
-        let parser = Parser::new(markdown);
+        let options =
+            Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH;
+        let parser = Parser::new_ext(markdown, options);
         let mut output = String::new();
         let mut in_code_block = false;
 
@@ -110,11 +113,7 @@ impl TypstRenderer {
                     if in_code_block {
                         // Inside #raw("…") string — escape backslash and
                         // double-quote so they don't break the Typst string.
-                        output.push_str(
-                            &text
-                                .replace('\\', "\\\\")
-                                .replace('"', "\\\""),
-                        );
+                        output.push_str(&text.replace('\\', "\\\\").replace('"', "\\\""));
                     } else {
                         // Escape Typst special characters in prose
                         let escaped = text
@@ -131,19 +130,25 @@ impl TypstRenderer {
                 Event::End(TagEnd::Table) => {
                     output.push_str(")\n");
                 }
-                Event::Start(Tag::TableHead) => {}
-                Event::End(TagEnd::TableHead) => {}
+                Event::Start(Tag::TableHead) => {
+                    output.push_str("  table.header(");
+                }
+                Event::End(TagEnd::TableHead) => {
+                    trim_suffix(&mut output, ", ");
+                    output.push_str("),\n");
+                }
                 Event::Start(Tag::TableRow) => {
                     output.push_str("  ");
                 }
                 Event::End(TagEnd::TableRow) => {
+                    trim_suffix(&mut output, ", ");
                     output.push_str(",\n");
                 }
                 Event::Start(Tag::TableCell) => {
                     output.push('[');
                 }
                 Event::End(TagEnd::TableCell) => {
-                    output.push(']');
+                    output.push_str("], ");
                 }
                 Event::SoftBreak => {
                     output.push(' ');
@@ -238,6 +243,8 @@ impl TypstRenderer {
 
         // Content
         if let Some(content) = chapter.get("content").and_then(|v| v.as_str()) {
+            validate_chapter_markdown(content)
+                .map_err(|err| ExportError::InvalidMarkdown(err.summary().to_string()))?;
             typst.push_str(&self.render_markdown_to_typst(content));
             typst.push('\n');
         }
@@ -353,6 +360,18 @@ impl TypstRenderer {
         typst.push_str("// ]\n");
 
         Ok(typst)
+    }
+}
+
+impl Default for TypstRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn trim_suffix(output: &mut String, suffix: &str) {
+    if output.ends_with(suffix) {
+        output.truncate(output.len() - suffix.len());
     }
 }
 
@@ -522,9 +541,7 @@ fn fix_typst_math(math: &str) -> String {
 
     // Insert spaces between adjacent ASCII letters
     let re_letters = regex::Regex::new(r"([a-zA-Z])([a-zA-Z])").unwrap();
-    let mut result = re_letters
-        .replace_all(&protected, "$1 $2")
-        .to_string();
+    let mut result = re_letters.replace_all(&protected, "$1 $2").to_string();
 
     // Restore identifiers (now without backslash for Typst compatibility)
     for (i, name) in placeholders.iter().enumerate() {
@@ -574,6 +591,56 @@ mod tests {
     }
 
     #[test]
+    fn test_render_table() {
+        let renderer = TypstRenderer::new();
+        let markdown = "| Operator | What it does | Example | Result |\n|----------|--------------|---------|--------|\n| AND | Both must be True | A && B | True if both True |\n| OR | At least one must be True | A \\|\\| B | True if either True |\n| NOT | Flips True to False | !A | True if A is False |";
+        let typst = renderer.render_markdown_to_typst(markdown);
+        // Check that table is generated
+        assert!(typst.contains("#table("));
+        assert!(typst.contains("columns: 4"));
+        assert!(typst.contains("table.header([Operator], [What it does], [Example], [Result])"));
+        // Check that cell content is present
+        assert!(typst.contains("AND"));
+        assert!(typst.contains("Both must be True"));
+        assert_typst_compiles_if_available(&typst);
+    }
+
+    #[test]
+    fn test_render_table_with_empty_cells() {
+        let renderer = TypstRenderer::new();
+        let markdown = "| Operator | What it does | Example | Result |\n|----------|--------------|---------|--------|\n|          | Both must be True |         |        |\n|          | At least one must be True | |        |\n|          | Flips True to False | |        |";
+        let typst = renderer.render_markdown_to_typst(markdown);
+        // Check that table is generated
+        assert!(typst.contains("#table("));
+        assert!(typst.contains("columns: 4"));
+        assert_typst_compiles_if_available(&typst);
+    }
+
+    #[test]
+    fn test_render_table_with_pasted_text() {
+        let markdown = "| Operator | What it does | Example | Result |\n|----------|--------------|---------|--------|\n| [Pasted ~2 lines] | Both must be True | | |";
+        let chapter = serde_json::json!({
+            "title": "Broken Table",
+            "content": markdown
+        });
+        let err = TypstRenderer::new()
+            .render_chapter(&chapter)
+            .expect_err("placeholder artifacts should be rejected");
+        assert!(err.to_string().contains("Invalid chapter markdown"));
+    }
+
+    #[test]
+    fn test_debug_table_events() {
+        use pulldown_cmark::{Options, Parser};
+        let markdown = "| A | B |\n|---|---|\n| 1 | 2 |";
+        let options = Options::ENABLE_TABLES;
+        let parser = Parser::new_ext(markdown, options);
+        for event in parser {
+            println!("{:?}", event);
+        }
+    }
+
+    #[test]
     fn test_math_and_code_blocks_render_without_delimiter_errors() {
         let renderer = TypstRenderer::new();
         let chapter = serde_json::json!({
@@ -588,12 +655,24 @@ mod tests {
         let source = renderer.render_chapter(&chapter).unwrap();
 
         // Math in prose should be fixed
-        assert!(source.contains("$E = m c^2$"), "inline math should get spaces");
-        assert!(source.contains("$a+b=c$"), "inline math after code block should work");
+        assert!(
+            source.contains("$E = m c^2$"),
+            "inline math should get spaces"
+        );
+        assert!(
+            source.contains("$a+b=c$"),
+            "inline math after code block should work"
+        );
 
         // Code block uses #raw("...") string with escaped quotes
-        assert!(source.contains("#raw(lang: \"python\", block: true, \""), "should use string block");
-        assert!(source.contains("print(\\\"hello"), "quotes in code should be escaped");
+        assert!(
+            source.contains("#raw(lang: \"python\", block: true, \""),
+            "should use string block"
+        );
+        assert!(
+            source.contains("print(\\\"hello"),
+            "quotes in code should be escaped"
+        );
 
         // Verify the raw block syntax is intact: should NOT have unescaped "
         // inside #raw() strings (check that the #raw(...) blocks are well-formed)
@@ -617,6 +696,34 @@ mod tests {
                     "typst compile failed:\nSTDERR:\n{}\n\nSOURCE (first 2000 chars):\n{}",
                     String::from_utf8_lossy(&out.stderr),
                     &source[..source.len().min(2000)]
+                );
+            }
+            Err(_e) => {
+                // typst not installed — skip compilation check
+            }
+        }
+    }
+
+    fn assert_typst_compiles_if_available(source: &str) {
+        let dir = tempfile::TempDir::new().unwrap();
+        let input = dir.path().join("input.typ");
+        let output = dir.path().join("output.pdf");
+        std::fs::write(&input, source).unwrap();
+
+        let result = std::process::Command::new("typst")
+            .args(["compile", input.to_str().unwrap(), output.to_str().unwrap()])
+            .output();
+
+        match result {
+            Ok(out) if out.status.success() => {
+                let pdf = std::fs::read(&output).unwrap();
+                assert!(pdf.starts_with(b"%PDF-"), "should produce valid PDF");
+            }
+            Ok(out) => {
+                panic!(
+                    "typst compile failed:\nSTDERR:\n{}\n\nSOURCE:\n{}",
+                    String::from_utf8_lossy(&out.stderr),
+                    source
                 );
             }
             Err(_e) => {

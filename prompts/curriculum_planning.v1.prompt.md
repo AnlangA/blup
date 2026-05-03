@@ -10,11 +10,17 @@ Generate a personalized curriculum plan from the confirmed learning goal and lea
 <instructions>
 Design the curriculum by thinking through these steps in order:
 
+**Step 0 — Identify the Actual Subject Domain**
+- Infer the real subject domain from the learner's goal itself, not from examples elsewhere in this prompt.
+- Keep every chapter aligned to that domain and to the learner's stated outcome.
+- Do NOT introduce Python, programming, notebooks, libraries, or code-first activities unless the goal explicitly requires them.
+- For non-programming goals, use subject-appropriate chapter types such as concepts, worked examples, case studies, drills, critiques, labs, or practice scenarios.
+
 **Step 1 — Analyze the Learner**
 Examine the user profile to determine:
 - Starting point: What does the learner already know? (domain_knowledge level)
 - Pace: How fast should content progress? (pace_preference + hours_per_week)
-- Format: What content types to emphasize? (preferred_format)
+- Format: What content types to emphasize? (preferred_format). Use those preferences to bias the curriculum, but do not force a medium that does not fit the subject.
 - Challenge: How difficult should exercises be? (difficulty_bias)
 
 **Step 2 — Decompose the Goal**
@@ -22,6 +28,7 @@ Break the learning goal into a logical sequence of knowledge milestones. Each mi
 - Be a self-contained skill or concept that can be taught in one session
 - Build directly on the milestones before it
 - Map to one chapter in the curriculum
+- Stay within the learner's stated subject area rather than drifting into unrelated tools or disciplines
 
 **Step 3 — Determine Chapter Count**
 Based on goal scope and learner profile:
@@ -41,9 +48,9 @@ Adjust for time constraints:
 
 **Step 4 — Write Each Chapter**
 For each chapter, define:
-- A unique `id` (kebab-case, descriptive: e.g., "python-basics", "data-cleaning")
+- A unique `id` (kebab-case, descriptive: e.g., "linear-equations-basics", "spanish-greetings", "sql-joins")
 - A clear, learner-facing `title`
-- 3–5 specific, measurable `objectives` (use action verbs: "Write X", "Explain Y", "Build Z")
+- 3–5 specific, measurable `objectives` using action verbs that fit the subject (e.g., "Solve", "Explain", "Interpret", "Build", "Photograph", "Critique")
 - `prerequisites` referencing chapter IDs that must come before
 - Realistic `estimated_minutes` based on content density and learner level
 
@@ -53,6 +60,8 @@ Verify that:
 - No chapter introduces concepts not covered by itself or a prerequisite
 - The progression feels natural — no sudden difficulty jumps
 - The curriculum title and description accurately reflect the content
+- No chapter title, objective, or prerequisite imports an unrelated domain, tool, or language
+- `estimated_duration` roughly matches the chapter count, chapter lengths, and stated `hours_per_week`
 </instructions>
 
 <output_format>
@@ -87,67 +96,71 @@ Schema reference: `schemas/curriculum_plan.v1.schema.json`
 - `estimated_minutes` should be between 15 and 60 for any single chapter.
 - `learning_objectives` should be 3–6 high-level outcomes, each distinct and measurable.
 - `prerequisites` for the first chapter must be an empty array.
-- Objectives must use concrete action verbs ("Write", "Build", "Explain", "Identify", "Debug"), not vague ones ("Understand", "Know", "Learn about").
+- Objectives must use concrete action verbs ("Solve", "Build", "Explain", "Interpret", "Identify", "Critique"), not vague ones ("Understand", "Know", "Learn about").
+- Keep the curriculum in the same subject domain as the learning goal. Do not insert programming languages, Python libraries, notebooks, or coding tasks unless they are explicitly part of the goal or a clearly necessary prerequisite named by the goal.
+- `estimated_duration` should be plausible given the number of chapters, their `estimated_minutes`, and the learner's available time.
 </constraints>
 
 <examples>
 
-### Example: Beginner Python for Data Analysis
+### Example: Beginner Product Photography for Online Shops
 
-**Profile:** experience=beginner, pace=moderate, time=5hrs/week, format=exercise-based
-**Goal:** "Learn Python for data analysis with pandas"
+**Profile:** experience=beginner, pace=moderate, time=5hrs/week, format=visual + practice-based
+**Goal:** "Learn product photography for my online store"
 
 **Output:**
 ```json
 {
-  "title": "Python for Data Analysis: From Excel to pandas",
-  "description": "A hands-on curriculum that takes you from zero Python experience to analyzing real datasets with pandas, leveraging your Excel background as a bridge.",
+  "title": "Product Photography for Online Sellers",
+  "description": "A practical curriculum that helps you create clear, consistent product photos for listings using simple lighting, composition, and editing habits.",
   "chapters": [
     {
-      "id": "python-basics",
-      "title": "Python Basics for Data Work",
+      "id": "camera-phone-setup",
+      "title": "Set Up a Reliable Shooting Space",
       "order": 1,
       "objectives": [
-        "Install Python and Jupyter Notebook",
-        "Create variables and use basic data types (string, int, float, bool)",
-        "Write arithmetic expressions and simple print statements"
+        "Choose a stable background and shooting surface",
+        "Position lights to reduce harsh shadows",
+        "Prepare a repeatable phone or camera setup"
       ],
       "prerequisites": [],
       "estimated_minutes": 45
     },
     {
-      "id": "data-structures",
-      "title": "Lists, Dictionaries, and DataFrames",
+      "id": "composition-and-angles",
+      "title": "Frame Products Clearly and Consistently",
       "order": 2,
       "objectives": [
-        "Create and manipulate Python lists and dictionaries",
-        "Import pandas and create a DataFrame from a dictionary",
-        "Select columns and rows from a DataFrame"
+        "Compose centered and detail-focused product shots",
+        "Choose angles that communicate size and features",
+        "Create a shot checklist for consistent listings"
       ],
-      "prerequisites": ["python-basics"],
+      "prerequisites": ["camera-phone-setup"],
       "estimated_minutes": 50
     },
     {
-      "id": "reading-data",
-      "title": "Reading and Inspecting Data Files",
+      "id": "editing-for-listings",
+      "title": "Edit Photos for Clean, Trustworthy Listings",
       "order": 3,
       "objectives": [
-        "Read CSV and Excel files into pandas DataFrames",
-        "Use .head(), .info(), .describe() to inspect data",
-        "Identify missing values and data type issues"
+        "Crop and straighten product photos",
+        "Adjust exposure and white balance for consistency",
+        "Export web-ready images for product pages"
       ],
-      "prerequisites": ["data-structures"],
+      "prerequisites": ["composition-and-angles"],
       "estimated_minutes": 40
     }
   ],
   "estimated_duration": "4-6 weeks (5 hrs/week)",
   "learning_objectives": [
-    "Read CSV and Excel files into Python using pandas",
-    "Clean and filter messy datasets",
-    "Compute summary statistics and group-by aggregations",
-    "Build basic data visualizations with matplotlib"
+    "Create a repeatable low-cost product photo setup",
+    "Capture clear images that show product details honestly",
+    "Edit photos into a consistent listing-ready style",
+    "Build a simple workflow for photographing new inventory"
   ]
 }
 ```
+
+Use the same structure for programming goals, but only mention the specific language, library, or tool that the learner actually asked to study.
 
 </examples>

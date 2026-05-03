@@ -102,8 +102,8 @@ async fn main() -> Result<()> {
         Commands::ImportPdf {
             pdf_file,
             output,
-            max_chunk_size,
-            chunk_overlap,
+            max_chunk_size: _,
+            chunk_overlap: _,
         } => {
             println!("Importing PDF: {:?}", pdf_file);
             let doc = pipeline.import_file(&pdf_file).await?;
@@ -122,7 +122,7 @@ async fn main() -> Result<()> {
         Commands::ImportWebsite {
             url,
             output,
-            timeout,
+            timeout: _,
         } => {
             println!("Importing website: {}", url);
             let doc = pipeline.import_website(&url).await?;

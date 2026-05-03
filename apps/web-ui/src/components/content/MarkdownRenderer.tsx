@@ -173,6 +173,8 @@ function injectSandboxContainers(
 
     const portalDiv = document.createElement('div');
     portalDiv.className = 'sandbox-runner-portal';
+    // Hide the expressive-code rendered block since CodeMirror editor replaces it
+    (wrapper as HTMLElement).style.display = 'none';
     wrapper.insertAdjacentElement('afterend', portalDiv);
 
     blocks.push({
@@ -204,6 +206,8 @@ function injectSandboxContainers(
 
     const portalDiv = document.createElement('div');
     portalDiv.className = 'sandbox-runner-portal';
+    // Hide the rendered pre block since CodeMirror editor replaces it
+    (pre as HTMLElement).style.display = 'none';
     pre.insertAdjacentElement('afterend', portalDiv);
 
     blocks.push({

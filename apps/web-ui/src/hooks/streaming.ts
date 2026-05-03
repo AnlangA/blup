@@ -10,7 +10,7 @@ interface StreamState {
 type StreamAction =
   | { type: 'reset' }
   | { type: 'chunk'; text: string }
-  | { type: 'done' }
+  | { type: 'done'; content?: string | null }
   | { type: 'error'; message: string };
 
 function streamReducer(state: StreamState, action: StreamAction): StreamState {
@@ -20,7 +20,11 @@ function streamReducer(state: StreamState, action: StreamAction): StreamState {
     case 'chunk':
       return { ...state, content: (state.content ?? '') + action.text };
     case 'done':
-      return { ...state, isStreaming: false };
+      return {
+        ...state,
+        content: action.content ?? state.content,
+        isStreaming: false,
+      };
     case 'error':
       return { content: null, isStreaming: false, error: action.message };
   }
@@ -47,9 +51,16 @@ export function useStreamChapter(
 
     sseClient.connectGet(url, {
       onChunk: (text) => dispatch({ type: 'chunk', text }),
-      onDone: () => {
+      onDone: (result) => {
+        const content =
+          result &&
+          typeof result === 'object' &&
+          'content' in result &&
+          typeof (result as { content?: unknown }).content === 'string'
+            ? (result as { content: string }).content
+            : null;
         sseClient.close();
-        dispatch({ type: 'done' });
+        dispatch({ type: 'done', content });
       },
       onError: (_code, message) => {
         sseClient.close();

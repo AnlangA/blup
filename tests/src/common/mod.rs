@@ -145,9 +145,9 @@ impl TestHarness {
         let assessment = assessment_engine::AssessmentEngine::new();
 
         let content_pipeline = Arc::new(content_pipeline::ContentPipeline::new());
-        let sandbox_manager = Arc::new(sandbox_manager::SandboxManager::with_executor(
-            Box::new(sandbox_manager::MockExecutor::success_default()),
-        ));
+        let sandbox_manager = Arc::new(sandbox_manager::SandboxManager::with_executor(Box::new(
+            sandbox_manager::MockExecutor::success_default(),
+        )));
 
         let app_state = AppState {
             config: Arc::new(config),

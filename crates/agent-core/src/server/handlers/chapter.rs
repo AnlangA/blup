@@ -10,8 +10,77 @@ use super::helpers::{default_profile_json, load_or_404, next_sse_id};
 use super::types::SseEvent;
 use crate::error::ApiError;
 use crate::state::domain as d;
+use crate::state::session::SessionHandle;
 use crate::state::types::Transition;
 use crate::AppState;
+
+async fn finalize_generated_chapter(
+    state: &AppState,
+    chapter_id: &str,
+    chapter_title: &str,
+    content: String,
+) -> Result<String, ApiError> {
+    match state.content_pipeline.validate_chapter_markdown(&content) {
+        Ok(()) => Ok(content),
+        Err(err) => {
+            let issues = err
+                .issues()
+                .iter()
+                .map(|issue| match issue.line {
+                    Some(line) => format!("line {line}: {}", issue.message),
+                    None => issue.message.clone(),
+                })
+                .collect::<Vec<_>>();
+
+            tracing::warn!(
+                chapter_id = chapter_id,
+                issue_count = issues.len(),
+                issues = ?issues,
+                "Generated chapter markdown failed validation, attempting one repair pass"
+            );
+
+            let repaired = state
+                .agent
+                .repair_chapter_markdown(&ChapterMarkdownRepairContext {
+                    chapter_id: chapter_id.to_string(),
+                    chapter_title: chapter_title.to_string(),
+                    original_markdown: content,
+                    issues,
+                })
+                .await
+                .map_err(ApiError::from)?;
+
+            state
+                .content_pipeline
+                .validate_chapter_markdown(&repaired)
+                .map_err(|repair_err| {
+                    ApiError::Validation(format!(
+                        "Generated chapter markdown remained invalid after one repair attempt: {}",
+                        repair_err.summary()
+                    ))
+                })?;
+
+            Ok(repaired)
+        }
+    }
+}
+
+async fn clear_partial_stream_cache(handle: &SessionHandle, chapter_id: &str) {
+    let mut session = handle.write().await;
+    session.chapter_contents.remove(chapter_id);
+    session.updated_at = chrono::Utc::now();
+}
+
+fn stream_error_code(err: &ApiError) -> &'static str {
+    match err {
+        ApiError::Validation(_) => "VALIDATION_ERROR",
+        ApiError::Agent(_) => "AGENT_ERROR",
+        ApiError::InvalidTransition(_) => "INVALID_STATE_TRANSITION",
+        ApiError::NotFound => "NOT_FOUND",
+        ApiError::ServiceUnavailable => "SERVICE_UNAVAILABLE",
+        ApiError::Internal(_) => "INTERNAL_ERROR",
+    }
+}
 
 // ── start_chapter (sync) ──
 
@@ -65,12 +134,13 @@ pub async fn start_chapter(
         .agent
         .teach_chapter(&ChapterContext {
             chapter_id: ch_id.clone(),
-            chapter_title,
+            chapter_title: chapter_title.clone(),
             profile: profile_json,
             curriculum_context: json!({}),
         })
         .await
         .map_err(ApiError::from)?;
+    let content = finalize_generated_chapter(&state, &ch_id, &chapter_title, content).await?;
 
     {
         let mut s = handle.write().await;
@@ -159,7 +229,7 @@ pub async fn start_chapter_stream(
 
         let agent_stream = stream_state.agent.teach_chapter_stream(ChapterContext {
             chapter_id: stream_ch_id.clone(),
-            chapter_title,
+            chapter_title: chapter_title.clone(),
             profile: profile_json,
             curriculum_context: json!({}),
         });
@@ -193,6 +263,7 @@ pub async fn start_chapter_stream(
                     }
                 }
                 Ok(AgentStreamEvent::Error { code, message }) => {
+                    clear_partial_stream_cache(&stream_handle, &stream_ch_id).await;
                     yield Ok(Event::default()
                         .event("error")
                         .id(next_sse_id())
@@ -201,10 +272,33 @@ pub async fn start_chapter_stream(
                     return;
                 }
                 Ok(AgentStreamEvent::Done { .. }) => {
+                    let final_content = match finalize_generated_chapter(
+                        &stream_state,
+                        &stream_ch_id,
+                        &chapter_title,
+                        full_content,
+                    )
+                    .await
+                    {
+                        Ok(content) => content,
+                        Err(err) => {
+                            clear_partial_stream_cache(&stream_handle, &stream_ch_id).await;
+                            let code = stream_error_code(&err).to_string();
+                            yield Ok(Event::default()
+                                .event("error")
+                                .id(next_sse_id())
+                                .data(serde_json::to_string(&SseEvent::Error {
+                                    code,
+                                    message: err.to_string(),
+                                }).expect("SSE serialize")));
+                            return;
+                        }
+                    };
+
                     {
                         let mut s = stream_handle.write().await;
                         s.current_chapter_id = Some(stream_ch_id.clone());
-                        s.chapter_contents.insert(stream_ch_id.clone(), full_content.clone());
+                        s.chapter_contents.insert(stream_ch_id.clone(), final_content.clone());
                         s.updated_at = chrono::Utc::now();
                         stream_state.store.persist(s.id);
                     }
@@ -214,12 +308,13 @@ pub async fn start_chapter_stream(
                         .data(serde_json::to_string(&SseEvent::Done {
                             result: json!({
                                 "chapter_id": stream_ch_id,
-                                "content": full_content,
+                                "content": final_content,
                             }),
                         }).expect("SSE serialize")));
                     return;
                 }
                 Err(e) => {
+                    clear_partial_stream_cache(&stream_handle, &stream_ch_id).await;
                     yield Ok(Event::default()
                         .event("error")
                         .id(next_sse_id())

@@ -7,6 +7,7 @@ pub mod models;
 use std::path::Path;
 
 use error::{ExportError, ImportError};
+use export::MarkdownValidationError;
 use models::SourceDocument;
 
 /// Content pipeline for importing and exporting learning materials
@@ -50,6 +51,11 @@ impl ContentPipeline {
         chapter: &serde_json::Value,
     ) -> Result<String, ExportError> {
         self.renderer.render_chapter(chapter)
+    }
+
+    /// Validate generated chapter Markdown before persistence or export.
+    pub fn validate_chapter_markdown(&self, markdown: &str) -> Result<(), MarkdownValidationError> {
+        export::validate_chapter_markdown(markdown)
     }
 
     /// Render a curriculum to Typst

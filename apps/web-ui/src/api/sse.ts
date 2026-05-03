@@ -43,19 +43,23 @@ export class SSEClient {
     this.eventSource = es;
 
     es.addEventListener('chunk', (e: MessageEvent) => {
-      const d = JSON.parse(e.data);
+      const raw = JSON.parse(e.data);
+      const d = raw.data ?? raw;
       this.lastEventId = (e as unknown as { lastEventId: string }).lastEventId;
       this.reconnectAttempt = 0;
       handlers.onChunk?.(d.content, d.index ?? 0);
     });
 
     es.addEventListener('status', (e: MessageEvent) => {
-      const d = JSON.parse(e.data);
+      const raw = JSON.parse(e.data);
+      const d = raw.data ?? raw;
       handlers.onStatus?.(d.state, d.message);
     });
 
     es.addEventListener('done', (e: MessageEvent) => {
-      handlers.onDone?.(JSON.parse(e.data));
+      const raw = JSON.parse(e.data);
+      const d = raw.data ?? raw;
+      handlers.onDone?.(d.result ?? d);
       this.close();
     });
 
@@ -64,7 +68,8 @@ export class SSEClient {
       // Named SSE "error" event from the server (has data payload)
       if (msgEvent.data) {
         try {
-          const d = JSON.parse(msgEvent.data);
+          const raw = JSON.parse(msgEvent.data);
+          const d = raw.data ?? raw;
           handlers.onError?.(d.code, d.message);
           return;
         } catch {
@@ -80,12 +85,14 @@ export class SSEClient {
     });
 
     es.addEventListener('stdout', (e: MessageEvent) => {
-      const d = JSON.parse(e.data);
+      const raw = JSON.parse(e.data);
+      const d = raw.data ?? raw;
       handlers.onStdout?.(d.content);
     });
 
     es.addEventListener('stderr', (e: MessageEvent) => {
-      const d = JSON.parse(e.data);
+      const raw = JSON.parse(e.data);
+      const d = raw.data ?? raw;
       handlers.onStderr?.(d.content);
     });
   }
@@ -165,14 +172,28 @@ export class SSEClient {
         for (const line of lines) {
           if (line.startsWith('event: ')) {
             currentEvent = line.slice(7).trim();
+            currentData = '';
           } else if (line.startsWith('data: ')) {
-            currentData = line.slice(6);
+            if (currentData) {
+              currentData += '\n' + line.slice(6);
+            } else {
+              currentData = line.slice(6);
+            }
           } else if (line === '' && currentEvent) {
             this.dispatch(currentEvent, currentData, handlers);
             currentEvent = '';
             currentData = '';
           }
         }
+      }
+      // Process any remaining data in buffer after stream ends
+      if (buffer.trim() && currentEvent) {
+        // Handle case where data line was the last thing in buffer
+        const dataMatch = buffer.match(/^data: (.+)$/s);
+        if (dataMatch) {
+          currentData = dataMatch[1];
+        }
+        this.dispatch(currentEvent, currentData, handlers);
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
@@ -185,27 +206,30 @@ export class SSEClient {
   private dispatch(event: string, data: string, handlers: SSEHandlers): void {
     try {
       const parsed = JSON.parse(data);
+      // The backend uses #[serde(tag = "event", content = "data")],
+      // so the payload is { event, data: { ... } }. Extract the inner data.
+      const payload = parsed.data ?? parsed;
       switch (event) {
         case 'chunk':
-          handlers.onChunk?.(parsed.content, parsed.index ?? 0);
+          handlers.onChunk?.(payload.content, payload.index ?? 0);
           break;
         case 'status':
-          handlers.onStatus?.(parsed.state, parsed.message);
+          handlers.onStatus?.(payload.state, payload.message);
           break;
         case 'done':
-          handlers.onDone?.(parsed.result ?? parsed);
+          handlers.onDone?.(payload.result ?? payload);
           break;
         case 'error':
-          handlers.onError?.(parsed.code, parsed.message);
+          handlers.onError?.(payload.code, payload.message);
           break;
         case 'ping':
           handlers.onPing?.();
           break;
         case 'stdout':
-          handlers.onStdout?.(parsed.content);
+          handlers.onStdout?.(payload.content);
           break;
         case 'stderr':
-          handlers.onStderr?.(parsed.content);
+          handlers.onStderr?.(payload.content);
           break;
       }
     } catch {

@@ -63,7 +63,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/session/:id/export/curriculum/typst",
             post(handlers::export_curriculum_typst),
         )
-        .route("/api/sandbox/execute", post(handlers::sandbox_execute_stream))
+        .route(
+            "/api/sandbox/execute",
+            post(handlers::sandbox_execute_stream),
+        )
         .route("/api/sandbox/health", get(handlers::sandbox_health))
         .layer(CorsLayer::permissive())
         .with_state(state)

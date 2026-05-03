@@ -59,6 +59,9 @@ pub enum ExportError {
     #[error("Typst rendering failed: {0}")]
     RenderingFailed(String),
 
+    #[error("Invalid chapter markdown: {0}")]
+    InvalidMarkdown(String),
+
     #[error("Compilation failed: {message}")]
     CompilationFailed {
         message: String,

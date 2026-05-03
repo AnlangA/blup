@@ -245,6 +245,96 @@ fn test_prompt_loader_template_not_found() {
     assert!(result.is_err());
 }
 
+#[test]
+fn test_curriculum_planning_prompt_enforces_domain_fit() {
+    let loader = PromptLoader::new("../prompts");
+    let prompt = loader.load("curriculum_planning", 1).unwrap();
+
+    assert!(prompt.contains("Identify the Actual Subject Domain"));
+    assert!(prompt.contains("Do NOT introduce Python, programming, notebooks, libraries, or code-first activities unless the goal explicitly requires them."));
+    assert!(prompt.contains("Keep the curriculum in the same subject domain as the learning goal."));
+}
+
+#[test]
+fn test_chapter_teaching_prompt_no_longer_hardcodes_python() {
+    let loader = PromptLoader::new("../prompts");
+    let mut vars = HashMap::new();
+    vars.insert("chapter_id".to_string(), "fractions-basics".to_string());
+    vars.insert(
+        "user_profile".to_string(),
+        r#"{"experience_level":{"domain_knowledge":"beginner"}}"#.to_string(),
+    );
+    vars.insert(
+        "curriculum_context".to_string(),
+        r#"{"title":"Fractions","chapters":[{"id":"fractions-basics","title":"Fractions as Equal Parts"}]}"#
+            .to_string(),
+    );
+
+    let prompt = loader
+        .load_and_render("chapter_teaching", 1, &vars)
+        .unwrap();
+
+    assert!(!prompt.contains("```python"));
+    assert!(prompt.contains("Never switch to Python by default."));
+    assert!(prompt.contains("If you include a code block, it MUST use the language identifier that matches the subject matter"));
+}
+
+#[test]
+fn test_chapter_teaching_prompt_includes_table_safety_rules() {
+    let loader = PromptLoader::new("../prompts");
+    let prompt = loader.load("chapter_teaching", 1).unwrap();
+
+    assert!(prompt.contains("Table Safety Rules"));
+    assert!(prompt.contains("If a table cell contains a literal pipe character `|`, you MUST escape it as `\\|` or wrap the whole cell content in inline code."));
+    assert!(prompt
+        .contains("Never output clipboard or editor placeholder text such as `[Pasted ~2 lines]`"));
+}
+
+#[test]
+fn test_rendered_prompts_include_shared_goal_grounding_rules() {
+    let loader = PromptLoader::new("../prompts");
+    let mut vars = HashMap::new();
+    vars.insert(
+        "learning_goal".to_string(),
+        "Learn introductory statistics for psychology research".to_string(),
+    );
+    vars.insert("domain".to_string(), "statistics".to_string());
+    vars.insert(
+        "context".to_string(),
+        "I remember basic algebra".to_string(),
+    );
+
+    let prompt = loader
+        .load_and_render("feasibility_check", 1, &vars)
+        .unwrap();
+
+    assert!(prompt.contains("Treat examples inside prompts as patterns to imitate structurally, not as default topics to copy."));
+    assert!(prompt.contains(
+        "Never default to Python, coding tasks, or developer tooling for unrelated learning goals."
+    ));
+    assert!(prompt.contains("Examples embedded in prompts are illustrative patterns."));
+}
+
+#[test]
+fn test_feasibility_prompt_stays_domain_aligned_without_python_default() {
+    let loader = PromptLoader::new("../prompts");
+    let prompt = loader.load("feasibility_check", 1).unwrap();
+
+    assert!(prompt.contains("Keep the assessment and suggestions inside that subject area."));
+    assert!(prompt.contains("Do not default to programming languages or coding projects unless the goal is actually about them."));
+    assert!(!prompt.contains("Learn Python to automate repetitive spreadsheet tasks"));
+}
+
+#[test]
+fn test_profile_collection_prompt_handles_transfer_conservatively() {
+    let loader = PromptLoader::new("../prompts");
+    let prompt = loader.load("profile_collection", 1).unwrap();
+
+    assert!(prompt.contains("Assess `experience_level.domain_knowledge` relative to the target learning goal, not just general adjacent experience."));
+    assert!(prompt.contains("Do not set `domain_knowledge` above `beginner` solely because the learner has adjacent but different-domain experience."));
+    assert!(!prompt.contains("note the uncertainty in your reasoning"));
+}
+
 // ── HTTP API Integration Tests ──
 
 #[tokio::test]
@@ -414,6 +504,57 @@ async fn test_chapter_start_and_cache() {
     let (status, body2) = h.get(&format!("/api/session/{sid}/chapter/ch1")).await;
     assert_eq!(status, 200);
     assert_eq!(body1["content"], body2["content"]);
+}
+
+#[tokio::test]
+async fn test_chapter_generation_repairs_invalid_markdown_before_caching() {
+    let mock = make_mock_provider();
+    mock.replace_response(
+        3,
+        "## Logic Operators\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | A || B |\n\n[Pasted ~2 lines]",
+    );
+    mock.replace_response(
+        4,
+        "## Logic Operators\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | `A || B` |",
+    );
+
+    let h = TestHarness::with_mock_provider(mock).await;
+    let sid = h.setup_learning().await;
+
+    let (status, body1) = h.get(&format!("/api/session/{sid}/chapter/ch1")).await;
+    assert_eq!(status, 200);
+    let content = body1["content"].as_str().unwrap();
+    assert!(content.contains("`A || B`"));
+    assert!(!content.contains("[Pasted"));
+
+    let (status, body2) = h.get(&format!("/api/session/{sid}/chapter/ch1")).await;
+    assert_eq!(status, 200);
+    assert_eq!(body1["content"], body2["content"]);
+}
+
+#[tokio::test]
+async fn test_chapter_generation_returns_validation_error_after_failed_repair() {
+    let mock = make_mock_provider();
+    mock.replace_response(
+        3,
+        "## Logic Operators\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | A || B |\n\n[Pasted ~2 lines]",
+    );
+    mock.replace_response(
+        4,
+        "## Still Broken\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | A || B |\n\n[Pasted ~2 lines]",
+    );
+
+    let h = TestHarness::with_mock_provider(mock).await;
+    let sid = h.setup_learning().await;
+
+    let (status, body) = h.get(&format!("/api/session/{sid}/chapter/ch1")).await;
+    assert_eq!(status, 422);
+    assert_eq!(body["error"]["code"], "VALIDATION_ERROR");
+
+    let (status, session) = h.get(&format!("/api/session/{sid}")).await;
+    assert_eq!(status, 200);
+    let chapter_contents = session["chapter_contents"].as_object().unwrap();
+    assert!(!chapter_contents.contains_key("ch1"));
 }
 
 #[tokio::test]
@@ -595,6 +736,48 @@ async fn test_sse_chapter_stream() {
     }
 
     assert!(has_done, "Chapter stream should deliver content");
+}
+
+#[tokio::test]
+async fn test_sse_chapter_stream_validation_error_clears_partial_cache() {
+    use futures::StreamExt;
+
+    let mock = make_mock_provider();
+    mock.replace_response(
+        3,
+        "## Logic Operators\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | A || B |\n| AND | Both must be true | A && B |\n\n[Pasted ~2 lines]",
+    );
+    mock.replace_response(
+        4,
+        "## Still Broken\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | A || B |\n\n[Pasted ~2 lines]",
+    );
+
+    let h = TestHarness::with_mock_provider(mock).await;
+    let sid = h.setup_learning().await;
+
+    let url = format!("{}/api/session/{sid}/chapter/ch1/stream", h.base_url);
+    let client = TestHarness::http_client();
+    let resp = client.get(&url).send().await.unwrap();
+    assert!(resp.status().is_success());
+
+    let mut stream = resp.bytes_stream();
+    let mut buf = String::new();
+    let mut has_validation_error = false;
+
+    while let Some(Ok(chunk)) = stream.next().await {
+        buf.push_str(&String::from_utf8_lossy(&chunk));
+        if buf.contains("\"VALIDATION_ERROR\"") {
+            has_validation_error = true;
+            break;
+        }
+    }
+
+    assert!(has_validation_error, "chapter stream should report validation failure");
+
+    let (status, session) = h.get(&format!("/api/session/{sid}")).await;
+    assert_eq!(status, 200);
+    let chapter_contents = session["chapter_contents"].as_object().unwrap();
+    assert!(!chapter_contents.contains_key("ch1"));
 }
 
 #[tokio::test]

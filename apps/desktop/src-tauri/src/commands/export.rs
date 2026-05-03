@@ -117,10 +117,7 @@ async fn compile_or_save_typst(
                     message: format!("Failed to read compiled PDF: {e}"),
                 })?;
 
-                let checksum = format!(
-                    "sha256:{:x}",
-                    sha2::Sha256::digest(&pdf_data)
-                );
+                let checksum = format!("sha256:{:x}", sha2::Sha256::digest(&pdf_data));
 
                 return Ok(ExportResult {
                     path: save_path.to_string_lossy().to_string(),
@@ -152,10 +149,7 @@ async fn compile_or_save_typst(
     })?;
 
     let size = typst_source.len() as u64;
-    let checksum = format!(
-        "sha256:{:x}",
-        sha2::Sha256::digest(typst_source.as_bytes())
-    );
+    let checksum = format!("sha256:{:x}", sha2::Sha256::digest(typst_source.as_bytes()));
 
     Ok(ExportResult {
         path: typst_path.to_string_lossy().to_string(),
@@ -331,10 +325,7 @@ pub async fn export_typst(
         message: format!("Failed to write Typst file: {e}"),
     })?;
 
-    let checksum = format!(
-        "sha256:{:x}",
-        sha2::Sha256::digest(typst_source.as_bytes())
-    );
+    let checksum = format!("sha256:{:x}", sha2::Sha256::digest(typst_source.as_bytes()));
 
     let _ = app.emit(
         "export:complete",
@@ -396,10 +387,7 @@ pub async fn export_curriculum_typst(
         message: format!("Failed to write Typst file: {e}"),
     })?;
 
-    let checksum = format!(
-        "sha256:{:x}",
-        sha2::Sha256::digest(typst_source.as_bytes())
-    );
+    let checksum = format!("sha256:{:x}", sha2::Sha256::digest(typst_source.as_bytes()));
 
     let _ = app.emit(
         "export:complete",
@@ -509,8 +497,15 @@ mod tests {
 
         std::fs::write(&file_path, &typst_source).expect("write should succeed");
 
-        assert!(file_path.exists(), "Typst file should exist at {:?}", file_path);
-        assert!(file_path.metadata().unwrap().len() > 0, "File should not be empty");
+        assert!(
+            file_path.exists(),
+            "Typst file should exist at {:?}",
+            file_path
+        );
+        assert!(
+            file_path.metadata().unwrap().len() > 0,
+            "File should not be empty"
+        );
 
         let read_back = std::fs::read_to_string(&file_path).expect("read should succeed");
         assert_eq!(read_back, typst_source, "Round-trip should match");
@@ -599,8 +594,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&result).expect("serialize should succeed");
-        let parsed: ExportResult =
-            serde_json::from_str(&json).expect("deserialize should succeed");
+        let parsed: ExportResult = serde_json::from_str(&json).expect("deserialize should succeed");
 
         assert_eq!(parsed.path, "/tmp/test.typst");
         assert_eq!(parsed.checksum, "sha256:abcdef1234567890");

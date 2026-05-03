@@ -30,9 +30,9 @@ impl TypstCompiler {
         match self.compile_via_sandbox(typst_source, assets).await {
             Ok(artifact) => return Ok(artifact),
             Err(sandbox_err) => {
-                tracing::warn!(
+                tracing::debug!(
                     error = %sandbox_err,
-                    "Sandbox compilation failed, trying host typst CLI"
+                    "Sandbox compilation unavailable, trying host typst CLI"
                 );
             }
         }
@@ -143,10 +143,11 @@ impl TypstCompiler {
 
 /// Compile Typst source to PDF using the host `typst` CLI.
 fn compile_via_cli(typst_source: &str) -> Result<DocumentArtifact, ExportError> {
-    let tmp_dir = tempfile::TempDir::new().map_err(|e| ExportError::Io(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        format!("Failed to create temp dir: {e}"),
-    )))?;
+    let tmp_dir = tempfile::TempDir::new().map_err(|e| {
+        ExportError::Io(std::io::Error::other(format!(
+            "Failed to create temp dir: {e}"
+        )))
+    })?;
 
     let input_path = tmp_dir.path().join("input.typ");
     let output_path = tmp_dir.path().join("output.pdf");
@@ -211,7 +212,12 @@ fn parse_typst_errors(stderr: &str) -> Vec<TypstDiagnostic> {
                 DiagnosticSeverity::Warning
             };
 
-            let message = line.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string();
+            let message = line
+                .split_once(':')
+                .map(|x| x.1)
+                .unwrap_or("")
+                .trim()
+                .to_string();
 
             let mut diagnostic = TypstDiagnostic {
                 severity,

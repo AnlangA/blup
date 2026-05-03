@@ -558,6 +558,7 @@ interface SandboxState {
 
 type SandboxAction =
   | { type: "reset" }
+  | { type: "executing" }
   | { type: "status"; state: string; message: string }
   | { type: "stdout"; content: string }
   | { type: "stderr"; content: string }
@@ -570,6 +571,17 @@ function sandboxReducer(
 ): SandboxState {
   switch (action.type) {
     case "reset":
+      return {
+        stdout: "",
+        stderr: "",
+        status: null,
+        message: null,
+        isRunning: false,
+        error: null,
+        exitCode: null,
+        durationMs: null,
+      };
+    case "executing":
       return {
         stdout: "",
         stderr: "",
@@ -613,7 +625,7 @@ export function useSandboxExecute() {
 
   const execute = useCallback((req: SandboxExecuteRequest) => {
     sseRef.current.close();
-    dispatch({ type: "reset" });
+    dispatch({ type: "executing" });
 
     sseRef.current.connectPost("/api/sandbox/execute", req, {
       onStatus: (st, msg) =>

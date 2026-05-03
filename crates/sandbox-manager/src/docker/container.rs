@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::config::SandboxConfig;
 use crate::error::SandboxError;
-use crate::models::request::SandboxRequest;
+use crate::models::request::{SandboxRequest, ToolKind};
 use crate::models::result::{ResourceUsage, SandboxResult};
 use crate::models::status::ExecutionStatus;
 
@@ -25,17 +25,28 @@ impl ContainerExecutor {
             request.limits.compile_timeout_secs + request.limits.run_timeout_secs,
         );
 
+        // Typst needs a shell for multi-step commands and more PIDs for rayon
+        let needs_shell = matches!(request.tool_kind, ToolKind::TypstCompile);
+        let pids_limit = if request.limits.max_processes < 64 && needs_shell {
+            64
+        } else {
+            request.limits.max_processes
+        };
+
         // Build docker run command (without --rm so we can inspect after exit)
         let mut cmd = Command::new("docker");
         cmd.args(["run"])
             .args(["--name", &container_name])
             .args(["--memory", &format!("{}m", request.limits.memory_mb)])
             .args(["--cpus", &format!("{}", request.limits.cpu_count)])
-            .args(["--pids-limit", &format!("{}", request.limits.max_processes)])
+            .args(["--pids-limit", &format!("{}", pids_limit)])
             .args(["--security-opt", "no-new-privileges:true"])
             .args(["--read-only"])
-            .args(["--tmpfs", "/workspace:rw,noexec,nosuid,size=100m"])
-            .args(["--tmpfs", "/tmp:rw,noexec,nosuid,size=10m"])
+            .args([
+                "--tmpfs",
+                "/workspace:rw,nosuid,size=100m,uid=1000,gid=1000",
+            ])
+            .args(["--tmpfs", "/tmp:rw,nosuid,size=10m,uid=1000,gid=1000"])
             .args(["--cap-drop", "ALL"])
             .args(["--user", "1000:1000"]);
 
@@ -53,7 +64,14 @@ impl ContainerExecutor {
 
         // Image and command
         cmd.arg(image);
-        cmd.arg(&request.code);
+
+        if needs_shell {
+            // Typst image uses ENTRYPOINT ["typst"]; override to sh for
+            // multi-step shell commands (base64 decode → compile → encode).
+            cmd.args(["sh", "-c", &request.code]);
+        } else {
+            cmd.arg(&request.code);
+        }
 
         // Execute with timeout
         let start = std::time::Instant::now();

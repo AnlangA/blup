@@ -121,7 +121,7 @@ async fn main() -> Result<()> {
             chapter_json,
             output,
             template,
-            sandbox,
+            sandbox: _,
             no_sandbox,
         } => {
             export_chapter(chapter_json, output, template, !no_sandbox).await?;
@@ -130,7 +130,7 @@ async fn main() -> Result<()> {
             curriculum_json,
             output,
             toc,
-            sandbox,
+            sandbox: _,
             no_sandbox,
         } => {
             export_curriculum(curriculum_json, output, toc, !no_sandbox).await?;
@@ -145,7 +145,7 @@ async fn main() -> Result<()> {
         Commands::Compile {
             typst_file,
             output,
-            sandbox,
+            sandbox: _,
             no_sandbox,
         } => {
             compile_typst(typst_file, output, !no_sandbox).await?;
@@ -161,7 +161,7 @@ async fn main() -> Result<()> {
 async fn export_chapter(
     chapter_json: PathBuf,
     output: PathBuf,
-    template: String,
+    _template: String,
     use_sandbox: bool,
 ) -> Result<()> {
     println!("Exporting chapter from: {:?}", chapter_json);
@@ -177,8 +177,9 @@ async fn export_chapter(
     if use_sandbox {
         // 3. Compile via sandbox
         println!("Compiling via sandbox...");
-        let sandbox =
-            sandbox_manager::SandboxManager::new(sandbox_manager::SandboxConfig::default());
+        let sandbox = std::sync::Arc::new(sandbox_manager::SandboxManager::new(
+            sandbox_manager::SandboxConfig::default(),
+        ));
         let compiler = content_pipeline::export::TypstCompiler::new(sandbox);
         let artifact = compiler
             .compile_to_pdf(&typst_source, &std::collections::HashMap::new())
@@ -208,7 +209,7 @@ async fn export_chapter(
 async fn export_curriculum(
     curriculum_json: PathBuf,
     output: PathBuf,
-    toc: bool,
+    _toc: bool,
     use_sandbox: bool,
 ) -> Result<()> {
     println!("Exporting curriculum from: {:?}", curriculum_json);
@@ -221,8 +222,9 @@ async fn export_curriculum(
 
     if use_sandbox {
         println!("Compiling via sandbox...");
-        let sandbox =
-            sandbox_manager::SandboxManager::new(sandbox_manager::SandboxConfig::default());
+        let sandbox = std::sync::Arc::new(sandbox_manager::SandboxManager::new(
+            sandbox_manager::SandboxConfig::default(),
+        ));
         let compiler = content_pipeline::export::TypstCompiler::new(sandbox);
         let artifact = compiler
             .compile_to_pdf(&typst_source, &std::collections::HashMap::new())
@@ -269,8 +271,9 @@ async fn compile_typst(typst_file: PathBuf, output: PathBuf, use_sandbox: bool) 
     let typst_source = std::fs::read_to_string(&typst_file)?;
 
     if use_sandbox {
-        let sandbox =
-            sandbox_manager::SandboxManager::new(sandbox_manager::SandboxConfig::default());
+        let sandbox = std::sync::Arc::new(sandbox_manager::SandboxManager::new(
+            sandbox_manager::SandboxConfig::default(),
+        ));
         let compiler = content_pipeline::export::TypstCompiler::new(sandbox);
         let artifact = compiler
             .compile_to_pdf(&typst_source, &std::collections::HashMap::new())
@@ -328,21 +331,9 @@ fn check_balanced_brackets(text: &str) -> bool {
     for c in text.chars() {
         match c {
             '[' | '(' | '{' => stack.push(c),
-            ']' => {
-                if stack.pop() != Some('[') {
-                    return false;
-                }
-            }
-            ')' => {
-                if stack.pop() != Some('(') {
-                    return false;
-                }
-            }
-            '}' => {
-                if stack.pop() != Some('{') {
-                    return false;
-                }
-            }
+            ']' if stack.pop() != Some('[') => return false,
+            ')' if stack.pop() != Some('(') => return false,
+            '}' if stack.pop() != Some('{') => return false,
             _ => {}
         }
     }

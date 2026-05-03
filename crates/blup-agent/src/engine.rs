@@ -249,6 +249,15 @@ impl AgentEngine {
             .await
     }
 
+    pub async fn repair_chapter_markdown(
+        &self,
+        ctx: &ChapterMarkdownRepairContext,
+    ) -> Result<String, AgentError> {
+        let (system_prompt, user_prompt) = self.chapter_markdown_repair_prompts(ctx)?;
+        self.llm_text(&system_prompt, &user_prompt, "chapter_markdown_repair")
+            .await
+    }
+
     pub fn teach_chapter_stream(
         &self,
         ctx: ChapterContext,
@@ -345,6 +354,33 @@ impl AgentEngine {
             .load_and_render("chapter_teaching", 1, &vars)
             .map_err(AgentError::from)?;
         let user_prompt = format!("Start teaching chapter: {}", ctx.chapter_title);
+        Ok((system_prompt, user_prompt))
+    }
+
+    fn chapter_markdown_repair_prompts(
+        &self,
+        ctx: &ChapterMarkdownRepairContext,
+    ) -> Result<(String, String), AgentError> {
+        let mut vars = HashMap::new();
+        vars.insert("chapter_id".to_string(), ctx.chapter_id.clone());
+        vars.insert("chapter_title".to_string(), ctx.chapter_title.clone());
+        let system_prompt = self
+            .prompts
+            .load_and_render("chapter_markdown_repair", 1, &vars)
+            .map_err(AgentError::from)?;
+        let issue_list = if ctx.issues.is_empty() {
+            "- Unknown Markdown validation failure".to_string()
+        } else {
+            ctx.issues
+                .iter()
+                .map(|issue| format!("- {issue}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let user_prompt = format!(
+            "Detected issues:\n{issue_list}\n\nOriginal chapter Markdown:\n```markdown\n{}\n```",
+            ctx.original_markdown
+        );
         Ok((system_prompt, user_prompt))
     }
 
@@ -608,6 +644,23 @@ mod tests {
             result.err()
         );
         assert!(!result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_repair_chapter_markdown() {
+        let engine = test_engine_with_response("## Repaired\n\n- Fixed comparison").await;
+        let result = engine
+            .repair_chapter_markdown(&ChapterMarkdownRepairContext {
+                chapter_id: "ch1".to_string(),
+                chapter_title: "Logic Operators".to_string(),
+                original_markdown: "| A | B |\n|---|---|\n| OR | A || B |".to_string(),
+                issues: vec![
+                    "line 3: Table row has 4 columns but expected 2; this usually means an unescaped `|` inside a cell".to_string(),
+                ],
+            })
+            .await;
+        assert!(result.is_ok(), "Markdown repair failed: {:?}", result.err());
+        assert!(result.unwrap().contains("Repaired"));
     }
 
     #[tokio::test]

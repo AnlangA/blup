@@ -64,6 +64,15 @@ pub struct ChapterContext {
     pub curriculum_context: serde_json::Value,
 }
 
+/// Context for repairing invalid chapter Markdown.
+#[derive(Debug, Clone)]
+pub struct ChapterMarkdownRepairContext {
+    pub chapter_id: String,
+    pub chapter_title: String,
+    pub original_markdown: String,
+    pub issues: Vec<String>,
+}
+
 /// Context for Q&A within a chapter.
 #[derive(Debug, Clone)]
 pub struct QaContext {
