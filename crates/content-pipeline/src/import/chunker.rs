@@ -22,6 +22,10 @@ pub fn chunk_text(text: &str, config: &ChunkConfig) -> Vec<String> {
         return Vec::new();
     }
 
+    if config.max_chunk_size_chars == 0 {
+        return Vec::new();
+    }
+
     if text.len() <= config.max_chunk_size_chars {
         return vec![text.to_string()];
     }
@@ -30,6 +34,7 @@ pub fn chunk_text(text: &str, config: &ChunkConfig) -> Vec<String> {
     let mut start = 0;
 
     while start < text.len() {
+        let previous_start = start;
         let end = std::cmp::min(start + config.max_chunk_size_chars, text.len());
 
         // Try to find a natural break point (paragraph, sentence, or word boundary)
@@ -51,14 +56,8 @@ pub fn chunk_text(text: &str, config: &ChunkConfig) -> Vec<String> {
             actual_end.saturating_sub(config.chunk_overlap_chars)
         };
 
-        // Prevent infinite loop
-        if start
-            <= chunks
-                .last()
-                .map(|c| text.find(c).unwrap_or(0))
-                .unwrap_or(0)
-        {
-            start = actual_end;
+        if start <= previous_start {
+            start = actual_end.max(previous_start + 1);
         }
     }
 
@@ -130,5 +129,29 @@ mod tests {
         };
         let chunks = chunk_text(text, &config);
         assert!(chunks.len() > 1);
+    }
+
+    #[test]
+    fn test_overlap_larger_than_chunk_size_still_progresses() {
+        let text = "abcdef ".repeat(100);
+        let config = ChunkConfig {
+            max_chunk_size_chars: 10,
+            chunk_overlap_chars: 50,
+        };
+        let chunks = chunk_text(&text, &config);
+        assert!(!chunks.is_empty());
+        assert!(chunks.len() < text.len());
+    }
+
+    #[test]
+    fn test_zero_chunk_size_returns_empty() {
+        let chunks = chunk_text(
+            "abc",
+            &ChunkConfig {
+                max_chunk_size_chars: 0,
+                chunk_overlap_chars: 0,
+            },
+        );
+        assert!(chunks.is_empty());
     }
 }

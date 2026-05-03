@@ -120,9 +120,11 @@ export interface ExportResult {
   page_count?: number;
 }
 
+import type { SandboxLanguage } from "./generated-sandbox";
+
 export interface SandboxExecuteRequest {
   session_id: string;
-  language: "python" | "javascript" | "rust" | "typst";
+  language: SandboxLanguage;
   code: string;
   stdin?: string;
   timeout_secs?: number;

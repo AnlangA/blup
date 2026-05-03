@@ -1,8 +1,9 @@
 use sandbox_manager::executor::{MockExecutor, SandboxExecutor};
 use sandbox_manager::models::limits::SandboxLimits;
-use sandbox_manager::models::request::{SandboxRequest, ToolKind};
+use sandbox_manager::models::request::SandboxRequest;
 use sandbox_manager::models::result::{ErrorDetails, ResourceUsage, SandboxResult};
 use sandbox_manager::models::status::ExecutionStatus;
+use sandbox_manager::ToolKind;
 use uuid::Uuid;
 
 fn make_request(code: &str) -> SandboxRequest {

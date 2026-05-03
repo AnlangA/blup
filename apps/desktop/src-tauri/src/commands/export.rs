@@ -36,15 +36,10 @@ impl From<content_pipeline::error::ExportError> for ExportError {
     }
 }
 
-/// Try to compile Typst source to PDF, falling back through multiple methods:
-/// 1. Docker sandbox (if available and sandbox-typst image exists)
-/// 2. Host typst CLI (typst compile)
-/// 3. Save as .typst source file (always works)
 async fn compile_or_save_typst(
     typst_source: &str,
     save_path: &std::path::Path,
 ) -> Result<ExportResult, ExportError> {
-    // Try 1: Docker sandbox compilation
     let sandbox_config = sandbox_manager::SandboxConfig::default()
         .with_image("sandbox-typst:latest")
         .with_timeouts(
@@ -54,107 +49,50 @@ async fn compile_or_save_typst(
         .with_memory(1024);
 
     let sandbox = std::sync::Arc::new(sandbox_manager::SandboxManager::new(sandbox_config));
+    let compiler = content_pipeline::export::TypstCompiler::new(sandbox);
 
-    // Quick health check before attempting compilation
-    let docker_available = sandbox.health_check().await.is_ok();
-
-    if docker_available {
-        let compiler = content_pipeline::export::TypstCompiler::new(sandbox);
-        if let Ok(artifact) = compiler
-            .compile_to_pdf(typst_source, &std::collections::HashMap::new())
-            .await
-        {
+    match compiler
+        .compile_to_pdf(typst_source, &std::collections::HashMap::new())
+        .await
+    {
+        Ok(artifact) => {
             std::fs::write(save_path, &artifact.data).map_err(|e| ExportError {
                 code: "WRITE_FAILED".to_string(),
                 message: format!("Failed to write PDF: {e}"),
             })?;
 
-            return Ok(ExportResult {
+            Ok(ExportResult {
                 path: save_path.to_string_lossy().to_string(),
                 checksum: artifact.checksum,
                 size_bytes: artifact.size_bytes,
                 page_count: artifact.page_count,
                 compiled: true,
                 format: "pdf".to_string(),
-            });
+            })
+        }
+        Err(err) => {
+            tracing::warn!(error = %err, "PDF compilation failed; saving Typst source instead");
+            save_typst_source(typst_source, save_path)
         }
     }
+}
 
-    // Try 2: Host typst CLI
-    let typst_check = std::process::Command::new("typst")
-        .arg("--version")
-        .output();
-
-    if let Ok(output) = typst_check {
-        if output.status.success() {
-            let tmp_dir = tempfile::TempDir::new().map_err(|e| ExportError {
-                code: "TEMP_DIR_FAILED".to_string(),
-                message: format!("Failed to create temp dir: {e}"),
-            })?;
-            let input_path = tmp_dir.path().join("input.typ");
-            std::fs::write(&input_path, typst_source).map_err(|e| ExportError {
-                code: "WRITE_FAILED".to_string(),
-                message: format!("Failed to write temp Typst file: {e}"),
-            })?;
-
-            let compile_result = std::process::Command::new("typst")
-                .args(["compile", input_path.to_str().unwrap_or("input.typ")])
-                .arg(save_path)
-                .output()
-                .map_err(|e| ExportError {
-                    code: "COMPILE_FAILED".to_string(),
-                    message: format!("Failed to run typst: {e}"),
-                })?;
-
-            if compile_result.status.success() {
-                let metadata = std::fs::metadata(save_path).map_err(|e| ExportError {
-                    code: "READ_FAILED".to_string(),
-                    message: format!("Failed to read compiled PDF: {e}"),
-                })?;
-
-                let pdf_data = std::fs::read(save_path).map_err(|e| ExportError {
-                    code: "READ_FAILED".to_string(),
-                    message: format!("Failed to read compiled PDF: {e}"),
-                })?;
-
-                let checksum = format!("sha256:{:x}", sha2::Sha256::digest(&pdf_data));
-
-                return Ok(ExportResult {
-                    path: save_path.to_string_lossy().to_string(),
-                    checksum,
-                    size_bytes: metadata.len(),
-                    page_count: None,
-                    compiled: true,
-                    format: "pdf".to_string(),
-                });
-            } else {
-                let stderr = String::from_utf8_lossy(&compile_result.stderr);
-                // Persist the failing Typst source so the user can inspect it
-                let debug_path = save_path.with_extension("debug.typ");
-                let _ = std::fs::write(&debug_path, typst_source);
-                tracing::warn!(
-                    "Host typst compilation failed. Source saved to {:?}\n--- stderr ---\n{}\n--- end ---",
-                    debug_path,
-                    stderr
-                );
-            }
-        }
-    }
-
-    // Fallback: Save .typst source file (always works)
+fn save_typst_source(
+    typst_source: &str,
+    save_path: &std::path::Path,
+) -> Result<ExportResult, ExportError> {
     let typst_path = save_path.with_extension("typst");
     std::fs::write(&typst_path, typst_source).map_err(|e| ExportError {
         code: "WRITE_FAILED".to_string(),
         message: format!("Failed to write Typst file: {e}"),
     })?;
 
-    let size = typst_source.len() as u64;
-    let checksum = format!("sha256:{:x}", sha2::Sha256::digest(typst_source.as_bytes()));
+    let artifact = content_pipeline::models::DocumentArtifact::new_typst(typst_source);
 
     Ok(ExportResult {
         path: typst_path.to_string_lossy().to_string(),
-        checksum,
-        size_bytes: size,
+        checksum: artifact.checksum,
+        size_bytes: artifact.size_bytes,
         page_count: None,
         compiled: false,
         format: "typst".to_string(),

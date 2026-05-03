@@ -5,8 +5,6 @@ edition = "2021"
 description = "Content import/export pipeline for Blup learning platform"
 
 [dependencies]
-# Internal
-storage = { path = "../storage" }
 sandbox-manager = { path = "../sandbox-manager" }
 
 # PDF extraction

@@ -1,0 +1,40 @@
+name: sandbox-ruby
+description: Ruby execution sandbox for scripting and web development exercises
+dockerfile: sandboxes/docker/Dockerfile.ruby
+version: 1
+
+base_image:
+  name: ruby:3.3-alpine
+  digest: sha256:placeholder
+
+pinned_packages: []
+
+build_args:
+  USER_ID: "1000"
+  USER_NAME: sandbox
+
+security:
+  seccomp_profile: sandboxes/policies/seccomp-python.json
+  read_only_rootfs: true
+  no_new_privileges: true
+  cap_drop: ["ALL"]
+
+limits:
+  compile_timeout_secs: 0
+  run_timeout_secs: 10
+  memory_mb: 512
+  cpu_count: 1
+  disk_mb: 100
+  max_processes: 10
+  network_enabled: false
+
+tests:
+  - name: ruby_version
+    command: ["ruby", "--version"]
+    expected_output: "ruby 3.3"
+  - name: basic_execution
+    command: ["ruby", "-e", "puts 'hello'"]
+    expected_output: "hello"
+  - name: network_blocked
+    command: ["sh", "-c", "timeout 5 wget -q http://example.com 2>/dev/null && echo 'NETWORK_ACCESSIBLE' || echo 'NETWORK_BLOCKED'"]
+    expected_output: "NETWORK_BLOCKED"

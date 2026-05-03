@@ -111,6 +111,9 @@ Formatting rules:
 - Do not include code unless the topic truly benefits from code. Never default to Python for unrelated subjects.
 - Do not rename the chapter into a different subject or quietly replace its objectives with ones from an example.
 - Do not introduce concepts that belong in later chapters unless explicitly connecting to them in "What's Next".
+- Every code example must be syntactically correct for the stated language AND compatible with the sandbox environment (no network, no external packages, no file I/O beyond the code block itself).
+- When the chapter topic is a supported programming language, at least 2 code blocks must be runnable (produce visible stdout).
+- Do not generate code that contains interactive input prompts.
 </constraints>
 
 <examples>

@@ -75,7 +75,7 @@ pub fn parse_markdown_with_headings(content: &str) -> Vec<(Vec<String>, String)>
     let mut chunks = Vec::new();
     let mut current_heading_path: Vec<String> = Vec::new();
     let mut current_content = String::new();
-    let mut heading_level = 0;
+    let mut heading_level: usize = 0;
 
     let parser = Parser::new(content);
 
@@ -102,7 +102,7 @@ pub fn parse_markdown_with_headings(content: &str) -> Vec<(Vec<String>, String)>
                 };
 
                 // Trim heading path to current level
-                current_heading_path.truncate(heading_level - 1);
+                current_heading_path.truncate(heading_level.saturating_sub(1));
             }
             Event::End(TagEnd::Heading(_)) => {
                 // Heading text will be captured in the next Text event

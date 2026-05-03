@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use crate::error::ExportError;
@@ -55,7 +57,10 @@ impl TypstRenderer {
                     };
                     output.push_str("#show raw: set block(below: 0.5em, above: 0.5em)\n");
                     if !lang.is_empty() {
-                        output.push_str(&format!("#raw(lang: \"{}\", block: true, \"", lang));
+                        output.push_str(&format!(
+                            "#raw(lang: \"{}\", block: true, \"",
+                            escape_typst_string(&lang)
+                        ));
                     } else {
                         output.push_str("#raw(block: true, \"");
                     }
@@ -111,9 +116,7 @@ impl TypstRenderer {
                 }
                 Event::Text(text) => {
                     if in_code_block {
-                        // Inside #raw("…") string — escape backslash and
-                        // double-quote so they don't break the Typst string.
-                        output.push_str(&text.replace('\\', "\\\\").replace('"', "\\\""));
+                        output.push_str(&escape_typst_string(&text));
                     } else {
                         // Escape Typst special characters in prose
                         let escaped = text
@@ -436,12 +439,9 @@ fn fix_typst_math_spans(text: &str) -> String {
     result
 }
 
-/// Find every `#raw(…, "…")` span (code block as string) and replace it
+/// Find every `#raw(…, "…")` span and replace it
 /// with a placeholder.  Returns the modified text and the original block
 /// texts so that `$` inside code blocks is not misinterpreted as math.
-///
-/// We must track escaped characters (`\"`, `\\`) inside the string so that
-/// we correctly find the closing `"` that ends the raw content.
 fn protect_raw_blocks(text: &str) -> (String, Vec<String>) {
     let mut blocks: Vec<String> = Vec::new();
     let mut out = String::with_capacity(text.len());
@@ -449,39 +449,12 @@ fn protect_raw_blocks(text: &str) -> (String, Vec<String>) {
 
     while i < text.len() {
         if text[i..].starts_with("#raw(") {
-            // Look for the string that holds the code content.
-            // #raw(block: true, "…") or #raw(lang: "…", block: true, "…")
-            // The last " argument before the closing ) is the code body.
-            // Find the last unescaped " before ) that ends the call.
-            if let Some(body_start) = find_raw_body_start(&text[i..]) {
-                let abs_start = i + body_start;
-                // body_start points to the opening " of the code string
-                // Now scan for closing " (unescaped)
-                let mut j = abs_start + 1;
-                let bytes = text.as_bytes();
-                while j < bytes.len() {
-                    if bytes[j] == b'\\' && j + 1 < bytes.len() {
-                        j += 2; // skip escaped char
-                        continue;
-                    }
-                    if bytes[j] == b'"' {
-                        // Found closing ". Expect ) to follow.
-                        let end = if j + 1 < bytes.len() && bytes[j + 1] == b')' {
-                            j + 1 // include )
-                        } else {
-                            j
-                        };
-                        let full = text[i..=end].to_string();
-                        blocks.push(full);
-                        out.push_str(&format!("\x00RAW{}\x00", blocks.len() - 1));
-                        i = end + 1;
-                        break;
-                    }
-                    j += 1;
-                }
-                if j < bytes.len() {
-                    continue; // already processed
-                }
+            if let Some(end) = find_raw_call_end(&text[i..]) {
+                let end = i + end;
+                blocks.push(text[i..end].to_string());
+                out.push_str(&format!("\x00RAW{}\x00", blocks.len() - 1));
+                i = end;
+                continue;
             }
         }
         // Copy one char forward
@@ -496,27 +469,38 @@ fn protect_raw_blocks(text: &str) -> (String, Vec<String>) {
     (out, blocks)
 }
 
-/// Given text starting with `#raw(…`, find the byte offset of the opening
-/// `"` that starts the code body (the last string argument).
-fn find_raw_body_start(text: &str) -> Option<usize> {
-    // Skip "#raw("
-    let after_open = &text[5..];
-    // The code body string is the last "…" argument before the closing ).
-    // Walk from the end backwards to find the opening ".
-    let mut last_quote = None;
-    let bytes = after_open.as_bytes();
-    let mut j = 0;
-    while j < bytes.len() {
-        if bytes[j] == b'\\' && j + 1 < bytes.len() {
-            j += 2;
+fn find_raw_call_end(text: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (idx, ch) in text.char_indices() {
+        if escaped {
+            escaped = false;
             continue;
         }
-        if bytes[j] == b'"' {
-            last_quote = Some(j);
+        if in_string {
+            match ch {
+                '\\' => escaped = true,
+                '"' => in_string = false,
+                _ => {}
+            }
+            continue;
         }
-        j += 1;
+        match ch {
+            '"' => in_string = true,
+            '(' => depth += 1,
+            ')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(idx + ch.len_utf8());
+                }
+            }
+            _ => {}
+        }
     }
-    last_quote.map(|pos| 5 + pos)
+
+    None
 }
 
 /// Adapt LaTeX-style math to Typst syntax.
@@ -531,7 +515,10 @@ fn find_raw_body_start(text: &str) -> Option<usize> {
 fn fix_typst_math(math: &str) -> String {
     // Protect LaTeX commands: strip backslash and save as placeholder
     // so that the letters inside the command name are not split apart
-    let re_cmd = regex::Regex::new(r"\\[a-zA-Z]+").unwrap();
+    static RE_CMD: OnceLock<regex::Regex> = OnceLock::new();
+    static RE_LETTERS: OnceLock<regex::Regex> = OnceLock::new();
+    let re_cmd =
+        RE_CMD.get_or_init(|| regex::Regex::new(r"\\[a-zA-Z]+").expect("valid command regex"));
     let mut placeholders: Vec<String> = Vec::new();
     let protected = re_cmd.replace_all(math, |caps: &regex::Captures| {
         let name = caps[0][1..].to_string(); // drop leading backslash
@@ -540,7 +527,8 @@ fn fix_typst_math(math: &str) -> String {
     });
 
     // Insert spaces between adjacent ASCII letters
-    let re_letters = regex::Regex::new(r"([a-zA-Z])([a-zA-Z])").unwrap();
+    let re_letters = RE_LETTERS
+        .get_or_init(|| regex::Regex::new(r"([a-zA-Z])([a-zA-Z])").expect("valid letter regex"));
     let mut result = re_letters.replace_all(&protected, "$1 $2").to_string();
 
     // Restore identifiers (now without backslash for Typst compatibility)
@@ -556,6 +544,10 @@ fn escape_typst(text: &str) -> String {
         .replace('[', "\\[")
         .replace(']', "\\]")
         .replace('$', "\\$")
+}
+
+fn escape_typst_string(text: &str) -> String {
+    text.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 #[cfg(test)]

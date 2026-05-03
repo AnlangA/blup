@@ -1,0 +1,433 @@
+#!/usr/bin/env python3
+"""Generate Rust, TypeScript, and JSON Schema from sandboxes/definitions/registry.yaml.
+
+Usage:
+    tools/generate-sandbox-registry              # regenerate all output files
+    tools/generate-sandbox-registry --check       # verify generated files match registry
+"""
+
+import sys
+import os
+import json
+import argparse
+
+# yaml is in the standard library as of Python 3.13+, but try the package too
+try:
+    import yaml
+except ImportError:
+    # Fallback: minimal YAML parser sufficient for our flat structure
+    yaml = None
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+REGISTRY_PATH = os.path.join(REPO_ROOT, "sandboxes", "definitions", "registry.yaml")
+
+GENERATED_RS_PATH = os.path.join(
+    REPO_ROOT, "crates", "sandbox-manager", "src", "generated.rs"
+)
+GENERATED_TS_PATH = os.path.join(
+    REPO_ROOT, "apps", "web-ui", "src", "api", "generated-sandbox.ts"
+)
+
+
+def parse_registry_yaml(path: str) -> dict:
+    """Parse the registry YAML file."""
+    with open(path, "r") as f:
+        content = f.read()
+
+    if yaml is not None:
+        return yaml.safe_load(content)
+
+    # Minimal YAML parser for our specific format
+    return _parse_simple_yaml(content)
+
+
+def _parse_simple_yaml(content: str) -> dict:
+    """Minimal YAML parser for registry format."""
+    languages = {}
+    current_lang = None
+    current_entry = {}
+    in_languages = False
+
+    for line in content.split("\n"):
+        stripped = line.rstrip()
+
+        # Skip comments and empty lines
+        if not stripped or stripped.lstrip().startswith("#"):
+            continue
+
+        indent = len(line) - len(line.lstrip())
+
+        if stripped.strip() == "languages:":
+            in_languages = True
+            continue
+
+        if not in_languages:
+            continue
+
+        if indent == 2 and not stripped.strip().startswith("-") and ":" in stripped:
+            # New language entry (e.g. "  python:")
+            if current_lang and current_entry:
+                languages[current_lang] = current_entry
+            key = stripped.strip().rstrip(":")
+            current_lang = key
+            current_entry = {}
+            continue
+
+        if indent == 4 and current_lang and ":" in stripped:
+            prop_line = stripped.strip()
+            key, _, value = prop_line.partition(":")
+            key = key.strip()
+            value = value.strip()
+
+            if value.startswith("[") and value.endswith("]"):
+                # Parse list
+                inner = value[1:-1].strip()
+                if inner:
+                    items = [item.strip().strip("\"'") for item in inner.split(",")]
+                    items = [item for item in items if item]  # filter empty
+                else:
+                    items = []
+                current_entry[key] = items
+            elif value.isdigit():
+                current_entry[key] = int(value)
+            elif value == "true":
+                current_entry[key] = True
+            elif value == "false":
+                current_entry[key] = False
+            elif value.startswith('"') and value.endswith('"'):
+                current_entry[key] = value[1:-1]
+            else:
+                current_entry[key] = value
+
+    if current_lang and current_entry:
+        languages[current_lang] = current_entry
+
+    return {"languages": languages}
+
+
+def generate_rust(registry: dict) -> str:
+    """Generate Rust source from registry."""
+    langs = registry["languages"]
+
+    # Build variant list and mappings
+    variants = []
+    for lang_name, entry in langs.items():
+        tool_kind = entry["tool_kind"]
+        variant_name = "".join(word.capitalize() for word in tool_kind.split("_"))
+        variants.append((lang_name, tool_kind, variant_name, entry))
+
+    lines = [
+        "// AUTO-GENERATED from sandboxes/definitions/registry.yaml — do not edit by hand.",
+        "",
+        "use serde::{Deserialize, Serialize};",
+        "",
+        "#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]",
+        "#[serde(rename_all = \"snake_case\")]",
+        "pub enum ToolKind {",
+    ]
+
+    for _lang_name, _tool_kind, variant_name, _entry in variants:
+        lines.append(f"    {variant_name},")
+
+    lines.append("}")
+    lines.append("")
+
+    # ExecutionModel enum
+    lines.extend([
+        "#[derive(Debug, Clone, Copy, PartialEq, Eq)]",
+        "pub enum ExecutionModel {",
+        "    Interpreted,",
+        "    Compiled,",
+        "}",
+        "",
+    ])
+
+    # Struct for per-language default limits
+    lines.extend([
+        "#[derive(Debug, Clone, Copy)]",
+        "pub struct LanguageLimits {",
+        "    pub compile_timeout_secs: u64,",
+        "    pub run_timeout_secs: u64,",
+        "    pub memory_mb: u64,",
+        "}",
+        "",
+    ])
+
+    # ToolKind impl
+    lines.append("impl ToolKind {")
+
+    # from_language
+    lines.append("    pub fn from_language(lang: &str) -> Option<Self> {")
+    lines.append("        match lang.to_lowercase().as_str() {")
+
+    # Collect all aliases -> variant mapping
+    for lang_name, _tool_kind, variant_name, entry in variants:
+        aliases = entry.get("aliases", [])
+        all_names = [lang_name] + aliases
+        match_str = " | ".join(f'"{a}"' for a in all_names)
+        lines.append(f"            {match_str} => Some(Self::{variant_name}),")
+
+    lines.append("            _ => None,")
+    lines.append("        }")
+    lines.append("    }")
+    lines.append("")
+
+    # to_image
+    lines.append("    pub fn to_image(&self) -> &str {")
+    lines.append("        match self {")
+    for _lang_name, _tool_kind, variant_name, entry in variants:
+        image = entry["image"]
+        lines.append(f'            Self::{variant_name} => "{image}",')
+    lines.append("        }")
+    lines.append("    }")
+    lines.append("")
+
+    # to_language
+    lines.append("    pub fn to_language(&self) -> &str {")
+    lines.append("        match self {")
+    for lang_name, _tool_kind, variant_name, _entry in variants:
+        lines.append(f'            Self::{variant_name} => "{lang_name}",')
+    lines.append("        }")
+    lines.append("    }")
+    lines.append("")
+
+    # execution_model
+    lines.append("    pub fn execution_model(&self) -> ExecutionModel {")
+    lines.append("        match self {")
+    interpreted_variants = [
+        vn for ln, _tk, vn, e in variants if e["execution_model"] == "interpreted"
+    ]
+    compiled_variants = [
+        vn for ln, _tk, vn, e in variants if e["execution_model"] == "compiled"
+    ]
+    if interpreted_variants:
+        match_str = " | ".join(f"Self::{v}" for v in interpreted_variants)
+        lines.append(f"            {match_str} => ExecutionModel::Interpreted,")
+    if compiled_variants:
+        match_str = " | ".join(f"Self::{v}" for v in compiled_variants)
+        lines.append(f"            {match_str} => ExecutionModel::Compiled,")
+    lines.append("        }")
+    lines.append("    }")
+    lines.append("")
+
+    # entrypoint
+    lines.append("    pub fn entrypoint(&self) -> Option<&[&str]> {")
+    lines.append("        match self {")
+    for _lang_name, _tool_kind, variant_name, entry in variants:
+        ep = entry.get("entrypoint")
+        if ep:
+            args_str = ", ".join(f'"{a}"' for a in ep)
+            lines.append(f"            Self::{variant_name} => Some(&[{args_str}]),")
+        else:
+            lines.append(f"            Self::{variant_name} => None,")
+    lines.append("        }")
+    lines.append("    }")
+    lines.append("")
+
+    # runner_script
+    lines.append("    pub fn runner_script(&self) -> Option<&str> {")
+    lines.append("        match self {")
+    for _lang_name, _tool_kind, variant_name, entry in variants:
+        rs = entry.get("runner_script")
+        if rs:
+            lines.append(f'            Self::{variant_name} => Some("{rs}"),')
+        else:
+            lines.append(f"            Self::{variant_name} => None,")
+    lines.append("        }")
+    lines.append("    }")
+    lines.append("")
+
+    # display_name
+    lines.append("    pub fn display_name(&self) -> &str {")
+    lines.append("        match self {")
+    for _lang_name, _tool_kind, variant_name, entry in variants:
+        display = entry["display"]
+        lines.append(f'            Self::{variant_name} => "{display}",')
+    lines.append("        }")
+    lines.append("    }")
+    lines.append("")
+
+    # default_limits
+    lines.append("    pub fn default_limits(&self) -> LanguageLimits {")
+    lines.append("        match self {")
+    for _lang_name, _tool_kind, variant_name, entry in variants:
+        ct = entry.get("compile_timeout_secs", 0)
+        rt = entry.get("run_timeout_secs", 10)
+        mm = entry.get("memory_mb", 512)
+        lines.append(
+            f"            Self::{variant_name} => LanguageLimits {{ compile_timeout_secs: {ct}, run_timeout_secs: {rt}, memory_mb: {mm} }},"
+        )
+    lines.append("        }")
+    lines.append("    }")
+
+    lines.append("}")
+    lines.append("")
+
+    # all_variants helper
+    lines.append("/// Returns all registered ToolKind variants.")
+    lines.append("pub fn all_tool_kinds() -> Vec<ToolKind> {")
+    lines.append("    vec![")
+    for _lang_name, _tool_kind, variant_name, _entry in variants:
+        lines.append(f"        ToolKind::{variant_name},")
+    lines.append("    ]")
+    lines.append("}")
+    lines.append("")
+
+    # all_languages_info
+    lines.append("/// Language info for display and lookup.")
+    lines.append("pub struct LanguageInfo {")
+    lines.append("    pub language: &'static str,")
+    lines.append("    pub display: &'static str,")
+    lines.append("    pub tool_kind: ToolKind,")
+    lines.append("    pub execution_model: ExecutionModel,")
+    lines.append("}")
+    lines.append("")
+    lines.append("pub fn all_languages_info() -> Vec<LanguageInfo> {")
+    lines.append("    vec![")
+    for lang_name, _tool_kind, variant_name, entry in variants:
+        display = entry["display"]
+        em = "ExecutionModel::Interpreted" if entry["execution_model"] == "interpreted" else "ExecutionModel::Compiled"
+        lines.append(
+            f'        LanguageInfo {{ language: "{lang_name}", display: "{display}", tool_kind: ToolKind::{variant_name}, execution_model: {em} }},'
+        )
+    lines.append("    ]")
+    lines.append("}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def generate_typescript(registry: dict) -> str:
+    """Generate TypeScript source from registry."""
+    langs = registry["languages"]
+
+    # Build alias map
+    alias_entries = []
+    for lang_name, entry in langs.items():
+        aliases = entry.get("aliases", [])
+        all_names = [lang_name] + aliases
+        for name in all_names:
+            alias_entries.append((name, lang_name))
+
+    # Build SandboxLanguage union
+    language_names = sorted(langs.keys())
+
+    # Build display map
+    display_entries = []
+    for lang_name, entry in langs.items():
+        display = entry["display"]
+        display_entries.append((lang_name, display))
+
+    lines = [
+        "// AUTO-GENERATED from sandboxes/definitions/registry.yaml — do not edit by hand.",
+        "",
+    ]
+
+    # SUPPORTED_LANGUAGES map
+    lines.append("export const SUPPORTED_LANGUAGES: Record<string, string> = {")
+    for name, lang in alias_entries:
+        lines.append(f'  {json.dumps(name)}: "{lang}",')
+    lines.append("} as const;")
+    lines.append("")
+
+    # SandboxLanguage union type
+    union = " | ".join(f'"{ln}"' for ln in language_names)
+    lines.append(f"export type SandboxLanguage = {union};")
+    lines.append("")
+
+    # LANGUAGE_DISPLAY map
+    lines.append("export const LANGUAGE_DISPLAY: Record<string, string> = {")
+    for lang_name, display in display_entries:
+        lines.append(f'  "{lang_name}": "{display}",')
+    lines.append("};")
+    lines.append("")
+
+    # Supported tool_kind values (for reference / schema validation)
+    tool_kinds = sorted(set(entry["tool_kind"] for entry in langs.values()))
+    lines.append(f"export const TOOL_KIND_VALUES = {json.dumps(tool_kinds)} as const;")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def generate_schema_snippet(registry: dict) -> str:
+    """Generate JSON Schema snippet for tool_kind and language enums."""
+    langs = registry["languages"]
+
+    tool_kinds = sorted(set(entry["tool_kind"] for entry in langs.values()))
+    languages = sorted(langs.keys())
+
+    return json.dumps(
+        {
+            "tool_kind": {"type": "string", "enum": tool_kinds},
+            "language": {"type": "string", "enum": languages},
+        },
+        indent=2,
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Generate sandbox registry code")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify generated files match registry without writing",
+    )
+    args = parser.parse_args()
+
+    registry = parse_registry_yaml(REGISTRY_PATH)
+
+    rust_code = generate_rust(registry)
+    ts_code = generate_typescript(registry)
+
+    if args.check:
+        errors = []
+
+        if os.path.exists(GENERATED_RS_PATH):
+            with open(GENERATED_RS_PATH, "r") as f:
+                existing = f.read()
+            if existing != rust_code:
+                errors.append(f"generated.rs is out of sync with registry.yaml")
+        else:
+            errors.append(f"generated.rs does not exist")
+
+        if os.path.exists(GENERATED_TS_PATH):
+            with open(GENERATED_TS_PATH, "r") as f:
+                existing = f.read()
+            if existing != ts_code:
+                errors.append(f"generated-sandbox.ts is out of sync with registry.yaml")
+        else:
+            errors.append(f"generated-sandbox.ts does not exist")
+
+        if errors:
+            for e in errors:
+                print(f"ERROR: {e}", file=sys.stderr)
+            print(
+                "Run 'tools/generate-sandbox-registry' to regenerate.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        print("All generated files are in sync with registry.yaml.")
+        sys.exit(0)
+
+    # Write generated files
+    os.makedirs(os.path.dirname(GENERATED_RS_PATH), exist_ok=True)
+    with open(GENERATED_RS_PATH, "w") as f:
+        f.write(rust_code)
+    print(f"Generated: {GENERATED_RS_PATH}")
+
+    os.makedirs(os.path.dirname(GENERATED_TS_PATH), exist_ok=True)
+    with open(GENERATED_TS_PATH, "w") as f:
+        f.write(ts_code)
+    print(f"Generated: {GENERATED_TS_PATH}")
+
+    # Print schema snippet for reference
+    schema_snippet = generate_schema_snippet(registry)
+    print(f"\nSchema snippet for sandbox_request.v1.schema.json:")
+    print(schema_snippet)
+
+
+if __name__ == "__main__":
+    main()

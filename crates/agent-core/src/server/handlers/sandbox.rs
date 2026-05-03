@@ -5,7 +5,8 @@ use serde_json::json;
 use uuid::Uuid;
 
 use sandbox_manager::models::limits::SandboxLimits;
-use sandbox_manager::models::request::{SandboxRequest, ToolKind};
+use sandbox_manager::models::request::SandboxRequest;
+use sandbox_manager::ToolKind;
 
 use super::helpers::next_sse_id;
 use super::types::{SandboxExecuteRequest, SseEvent};
@@ -18,8 +19,8 @@ pub async fn sandbox_execute_stream(
     State(state): State<AppState>,
     Json(req): Json<SandboxExecuteRequest>,
 ) -> Result<Sse<impl futures::Stream<Item = Result<Event, axum::Error>>>, ApiError> {
-    let tool_kind = language_to_toolkind(&req.language).map_err(|e| {
-        ApiError::Validation(format!("Unsupported language '{}': {e}", req.language))
+    let tool_kind = ToolKind::from_language(&req.language).ok_or_else(|| {
+        ApiError::Validation(format!("Unsupported language '{}'", req.language))
     })?;
 
     let session_id: Uuid = req
@@ -128,12 +129,3 @@ pub async fn sandbox_health(State(state): State<AppState>) -> Json<serde_json::V
     }))
 }
 
-fn language_to_toolkind(lang: &str) -> Result<ToolKind, String> {
-    match lang.to_lowercase().as_str() {
-        "python" | "py" => Ok(ToolKind::PythonExec),
-        "javascript" | "js" | "node" => Ok(ToolKind::NodeExec),
-        "rust" | "rs" => Ok(ToolKind::RustCompileRun),
-        "typst" => Ok(ToolKind::TypstCompile),
-        _ => Err(format!("Unsupported language: {lang}")),
-    }
-}

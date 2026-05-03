@@ -1,0 +1,20 @@
+FROM rust:1.83-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create sandbox user
+RUN useradd -m -u 1000 sandbox
+
+# Create writable workspace
+RUN mkdir -p /workspace && chown sandbox:sandbox /workspace
+
+# Standard runner: read stdin → compile → run
+RUN printf '#!/bin/sh\nset -e\nSRC=$(mktemp /workspace/main_XXXXXX.rs)\ncat > "$SRC"\nrustc -C opt-level=0 "$SRC" -o "${SRC%.rs}"\n"${SRC%.rs}"\n' \
+    > /usr/local/bin/sandbox-run-rust && chmod +x /usr/local/bin/sandbox-run-rust
+
+# Switch to sandbox user
+USER sandbox
+
+# Set working directory
+WORKDIR /workspace

@@ -1,0 +1,136 @@
+# Canonical sandbox language registry.
+# Backend (Rust) and frontend (TypeScript) code generators read this file.
+# To add a language: add an entry here + a Dockerfile in sandboxes/docker/.
+
+languages:
+  python:
+    tool_kind: python_exec
+    image: sandbox-python:latest
+    execution_model: interpreted
+    entrypoint: ["python", "-c"]
+    aliases: [py, python3]
+    display: Python
+    schema_language: python
+    compile_timeout_secs: 0
+    run_timeout_secs: 10
+    memory_mb: 512
+
+  javascript:
+    tool_kind: node_exec
+    image: sandbox-node:latest
+    execution_model: interpreted
+    entrypoint: ["node", "-e"]
+    aliases: [js, node]
+    display: JS
+    schema_language: javascript
+    compile_timeout_secs: 0
+    run_timeout_secs: 10
+    memory_mb: 512
+
+  typescript:
+    tool_kind: typescript_compile_run
+    image: sandbox-typescript:latest
+    execution_model: compiled
+    runner_script: sandbox-run-ts
+    aliases: [ts]
+    display: TS
+    schema_language: typescript
+    compile_timeout_secs: 30
+    run_timeout_secs: 10
+    memory_mb: 512
+
+  rust:
+    tool_kind: rust_compile_run
+    image: sandbox-rust:latest
+    execution_model: compiled
+    runner_script: sandbox-run-rust
+    aliases: [rs]
+    display: Rust
+    schema_language: rust
+    compile_timeout_secs: 60
+    run_timeout_secs: 10
+    memory_mb: 1024
+
+  go:
+    tool_kind: go_compile_run
+    image: sandbox-go:latest
+    execution_model: compiled
+    runner_script: sandbox-run-go
+    aliases: [golang]
+    display: Go
+    schema_language: go
+    compile_timeout_secs: 30
+    run_timeout_secs: 10
+    memory_mb: 512
+
+  c:
+    tool_kind: c_compile_run
+    image: sandbox-c:latest
+    execution_model: compiled
+    runner_script: sandbox-run-c
+    aliases: []
+    display: C
+    schema_language: c
+    compile_timeout_secs: 20
+    run_timeout_secs: 10
+    memory_mb: 256
+
+  cpp:
+    tool_kind: cpp_compile_run
+    image: sandbox-cpp:latest
+    execution_model: compiled
+    runner_script: sandbox-run-cpp
+    aliases: ["c++"]
+    display: C++
+    schema_language: cpp
+    compile_timeout_secs: 30
+    run_timeout_secs: 10
+    memory_mb: 512
+
+  java:
+    tool_kind: java_compile_run
+    image: sandbox-java:latest
+    execution_model: compiled
+    runner_script: sandbox-run-java
+    aliases: []
+    display: Java
+    schema_language: java
+    compile_timeout_secs: 30
+    run_timeout_secs: 10
+    memory_mb: 512
+
+  ruby:
+    tool_kind: ruby_exec
+    image: sandbox-ruby:latest
+    execution_model: interpreted
+    entrypoint: ["ruby", "-e"]
+    aliases: [rb]
+    display: Ruby
+    schema_language: ruby
+    compile_timeout_secs: 0
+    run_timeout_secs: 10
+    memory_mb: 512
+
+  bash:
+    tool_kind: bash_exec
+    image: sandbox-bash:latest
+    execution_model: interpreted
+    entrypoint: ["bash", "-c"]
+    aliases: [sh, shell, zsh]
+    display: Bash
+    schema_language: bash
+    compile_timeout_secs: 0
+    run_timeout_secs: 10
+    memory_mb: 128
+
+  typst:
+    tool_kind: typst_compile
+    image: sandbox-typst:latest
+    execution_model: compiled
+    runner_script: sandbox-run-typst
+    aliases: []
+    display: Typst
+    schema_language: typst
+    compile_timeout_secs: 60
+    run_timeout_secs: 10
+    memory_mb: 1024

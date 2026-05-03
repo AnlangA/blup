@@ -164,8 +164,9 @@ impl SandboxExecutor for MockExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::generated::ToolKind;
     use crate::models::limits::SandboxLimits;
-    use crate::models::request::ToolKind;
+    use crate::models::request::SandboxRequest;
     use crate::models::result::ErrorDetails;
 
     #[tokio::test]

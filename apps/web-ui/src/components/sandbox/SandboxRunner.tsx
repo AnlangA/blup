@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
 import { useSandboxExecute } from "../../hooks/query";
 import { useSessionStore } from "../../state/sessionStore";
-import type { SandboxExecuteRequest } from "../../api/client";
+import { SUPPORTED_LANGUAGES, LANGUAGE_DISPLAY } from "../../api/generated-sandbox";
+import type { SandboxLanguage } from "../../api/generated-sandbox";
 import { CodeEditor } from "./CodeEditor";
 
 interface SandboxRunnerProps {
@@ -9,23 +10,12 @@ interface SandboxRunnerProps {
   code: string;
 }
 
-const SUPPORTED_LANGUAGES: Record<string, SandboxExecuteRequest["language"]> = {
-  python: "python",
-  py: "python",
-  javascript: "javascript",
-  js: "javascript",
-  node: "javascript",
-  rust: "rust",
-  rs: "rust",
-  typst: "typst",
-};
-
 export function SandboxRunner({ language, code: initialCode }: SandboxRunnerProps) {
   const sessionId = useSessionStore((s) => s.sessionId);
   const sandbox = useSandboxExecute();
   const [editableCode, setEditableCode] = useState(initialCode);
 
-  const normalizedLanguage = SUPPORTED_LANGUAGES[language.toLowerCase()];
+  const normalizedLanguage = SUPPORTED_LANGUAGES[language.toLowerCase()] as SandboxLanguage | undefined;
 
   const handleRun = useCallback(() => {
     if (!sessionId || sandbox.isRunning || !normalizedLanguage) return;
@@ -44,7 +34,7 @@ export function SandboxRunner({ language, code: initialCode }: SandboxRunnerProp
 
   if (!normalizedLanguage) return null;
 
-  const displayLang = normalizedLanguage === "javascript" ? "JS" : normalizedLanguage;
+  const displayLang = LANGUAGE_DISPLAY[normalizedLanguage] || normalizedLanguage;
 
   return (
     <div className="sandbox-runner" data-testid="sandbox-runner">
@@ -106,5 +96,3 @@ export function SandboxRunner({ language, code: initialCode }: SandboxRunnerProp
     </div>
   );
 }
-
-export { SUPPORTED_LANGUAGES };

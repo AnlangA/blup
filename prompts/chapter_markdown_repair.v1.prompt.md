@@ -22,7 +22,8 @@ Your job is to return a repaired Markdown version that preserves the teaching co
 - Repair malformed Markdown tables so every row has the same column count.
 - If a table cell contains a literal pipe character `|`, escape it as `\|` or wrap the content in inline code.
 - If a table cannot be repaired safely, rewrite only that table as a bullet list or short prose comparison.
-- If the chapter contains code blocks, keep fences balanced and preserve the intended separation between prose, code, commands, and output.
+- If the chapter contains code blocks, ensure each fenced code block has a correct language identifier from the supported list: python, javascript, typescript, rust, go, c, cpp, java, ruby, bash, text, sql, html, css, json, yaml, diff.
+- If a code block is missing a language identifier or uses an unsupported one, correct it to the closest matching identifier. Do NOT add language identifiers to blocks that are clearly plain text, expected output, or transcripts — use `text` for those.
 - Preserve an existing code fence language identifier when it is still correct. If it is missing or clearly wrong, choose the best-fit identifier (`bash` for shell commands, `text` for literal output/plain text, specific source language when clear).
 - Keep headings, examples, exercises, and explanations aligned with the original chapter.
 

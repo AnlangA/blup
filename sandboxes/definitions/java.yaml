@@ -1,0 +1,40 @@
+name: sandbox-java
+description: Java compilation and execution sandbox for CS curriculum exercises
+dockerfile: sandboxes/docker/Dockerfile.java
+version: 1
+
+base_image:
+  name: eclipse-temurin:21-jdk-alpine
+  digest: sha256:placeholder
+
+pinned_packages: []
+
+build_args:
+  USER_ID: "1000"
+  USER_NAME: sandbox
+
+security:
+  seccomp_profile: sandboxes/policies/seccomp-python.json
+  read_only_rootfs: true
+  no_new_privileges: true
+  cap_drop: ["ALL"]
+
+limits:
+  compile_timeout_secs: 30
+  run_timeout_secs: 10
+  memory_mb: 512
+  cpu_count: 1
+  disk_mb: 300
+  max_processes: 10
+  network_enabled: false
+
+tests:
+  - name: java_version
+    command: ["java", "--version"]
+    expected_output: "21"
+  - name: compile_and_run
+    command: ["sh", "-c", "echo 'public class Test { public static void main(String[] args) { System.out.println(\"hello\"); } }' > /tmp/Test.java && javac /tmp/Test.java -d /tmp/out && java -cp /tmp/out Test"]
+    expected_output: "hello"
+  - name: network_blocked
+    command: ["sh", "-c", "timeout 5 wget -q http://example.com 2>/dev/null && echo 'NETWORK_ACCESSIBLE' || echo 'NETWORK_BLOCKED'"]
+    expected_output: "NETWORK_BLOCKED"

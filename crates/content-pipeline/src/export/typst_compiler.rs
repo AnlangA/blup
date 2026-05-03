@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use sandbox_manager::models::limits::SandboxLimits;
-use sandbox_manager::models::request::ToolKind;
-use sandbox_manager::{ExecutionStatus, SandboxManager, SandboxRequest};
+use sandbox_manager::{ExecutionStatus, SandboxManager, SandboxRequest, ToolKind};
 
 use crate::error::{DiagnosticSeverity, ExportError, TypstDiagnostic};
 use crate::models::document_artifact::DocumentArtifact;
@@ -116,11 +115,8 @@ impl TypstCompiler {
                     ));
                 }
 
-                // Count pages
-                let page_count = count_pdf_pages(&pdf_data);
-
                 let mut artifact = DocumentArtifact::new_pdf(&pdf_data, typst_source);
-                artifact.page_count = Some(page_count);
+                artifact.page_count = count_pdf_pages(&pdf_data);
 
                 Ok(artifact)
             }
@@ -183,17 +179,18 @@ fn compile_via_cli(typst_source: &str) -> Result<DocumentArtifact, ExportError> 
         ));
     }
 
-    let page_count = count_pdf_pages(&pdf_data);
     let mut artifact = DocumentArtifact::new_pdf(&pdf_data, typst_source);
-    artifact.page_count = Some(page_count);
+    artifact.page_count = count_pdf_pages(&pdf_data);
     Ok(artifact)
 }
 
-fn count_pdf_pages(data: &[u8]) -> u32 {
+fn count_pdf_pages(data: &[u8]) -> Option<u32> {
     let text = String::from_utf8_lossy(data);
-    // Count page objects: look for "/Type /Page" not followed by "s"
-    let re = regex::Regex::new(r"/Type\s*/Page[^s]").unwrap();
-    re.find_iter(&text).count() as u32
+    static RE: OnceLock<regex::Regex> = OnceLock::new();
+    let re = RE
+        .get_or_init(|| regex::Regex::new(r"/Type\s*/Page(\s|/|>>|\])").expect("valid page regex"));
+    let count = re.find_iter(&text).count() as u32;
+    (count > 0).then_some(count)
 }
 
 fn parse_typst_errors(stderr: &str) -> Vec<TypstDiagnostic> {

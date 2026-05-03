@@ -1,11 +1,13 @@
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::config::SandboxConfig;
 use crate::error::SandboxError;
-use crate::models::request::{SandboxRequest, ToolKind};
+use crate::generated::{ExecutionModel, ToolKind};
+use crate::models::request::SandboxRequest;
 use crate::models::result::{ResourceUsage, SandboxResult};
 use crate::models::status::ExecutionStatus;
 
@@ -25,13 +27,16 @@ impl ContainerExecutor {
             request.limits.compile_timeout_secs + request.limits.run_timeout_secs,
         );
 
-        // Typst needs a shell for multi-step commands and more PIDs for rayon
-        let needs_shell = matches!(request.tool_kind, ToolKind::TypstCompile);
-        let pids_limit = if request.limits.max_processes < 64 && needs_shell {
+        // Typst needs more PIDs for rayon parallelism
+        let needs_extra_pids = matches!(request.tool_kind, ToolKind::TypstCompile);
+        let pids_limit = if request.limits.max_processes < 64 && needs_extra_pids {
             64
         } else {
             request.limits.max_processes
         };
+
+        let execution_model = request.tool_kind.execution_model();
+        let code = request.code.clone();
 
         // Build docker run command (without --rm so we can inspect after exit)
         let mut cmd = Command::new("docker");
@@ -62,26 +67,67 @@ impl ContainerExecutor {
             cmd.args(["--security-opt", &format!("seccomp={}", profile)]);
         }
 
-        // Image and command
-        cmd.arg(image);
-
-        if needs_shell {
-            // Typst image uses ENTRYPOINT ["typst"]; override to sh for
-            // multi-step shell commands (base64 decode → compile → encode).
-            cmd.args(["sh", "-c", &request.code]);
-        } else {
-            cmd.arg(&request.code);
+        match execution_model {
+            ExecutionModel::Interpreted => {
+                // Interpreted-language images have ENTRYPOINT set (e.g. ["python", "-c"]).
+                // Just pass the code as the sole argument — the ENTRYPOINT handles the rest.
+                cmd.arg(image);
+                cmd.arg(&code);
+            }
+            ExecutionModel::Compiled => {
+                // docker run --entrypoint <runner_script> <image>
+                // code piped via stdin
+                if let Some(runner) = request.tool_kind.runner_script() {
+                    cmd.args(["--entrypoint", runner]);
+                }
+                cmd.arg(image);
+                cmd.stdin(Stdio::piped());
+            }
         }
 
         // Execute with timeout
         let start = std::time::Instant::now();
         let result = timeout(total_timeout, async {
-            let output = tokio::task::spawn_blocking(move || cmd.output())
-                .await
-                .map_err(|e| SandboxError::container(&format!("Failed to spawn task: {}", e)))?
-                .map_err(|e| {
-                    SandboxError::container(&format!("Failed to execute docker: {}", e))
-                })?;
+            let output = match execution_model {
+                ExecutionModel::Interpreted => {
+                    tokio::task::spawn_blocking(move || cmd.output())
+                        .await
+                        .map_err(|e| SandboxError::container(&format!("Failed to spawn task: {}", e)))?
+                        .map_err(|e| {
+                            SandboxError::container(&format!("Failed to execute docker: {}", e))
+                        })?
+                }
+                ExecutionModel::Compiled => {
+                    // Spawn the process, pipe code to stdin, then wait
+                    let mut child = tokio::task::spawn_blocking(move || {
+                        cmd.spawn().map_err(|e| {
+                            SandboxError::container(&format!("Failed to spawn docker: {}", e))
+                        })
+                    })
+                    .await
+                    .map_err(|e| SandboxError::container(&format!("Spawn task failed: {}", e)))??;
+
+                    {
+                        let stdin = child.stdin.take();
+                        if let Some(mut stdin) = stdin {
+                            stdin.write_all(code.as_bytes()).map_err(|e| {
+                                SandboxError::container(&format!("Failed to write stdin: {}", e))
+                            })?;
+                        }
+                        // stdin dropped here -> closes pipe -> runner reads EOF
+                    }
+
+                    tokio::task::spawn_blocking(move || child.wait_with_output())
+                        .await
+                        .map_err(|e| SandboxError::container(&format!("Wait task failed: {}", e)))?
+                        .map_err(|e| {
+                            SandboxError::container(&format!(
+                                "Failed to wait for docker output: {}",
+                                e
+                            ))
+                        })?
+                }
+            };
 
             Ok::<_, SandboxError>(output)
         })

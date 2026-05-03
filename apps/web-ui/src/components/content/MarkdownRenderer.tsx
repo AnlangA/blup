@@ -10,7 +10,8 @@ import rehypeRaw from 'rehype-raw';
 import rehypeExpressiveCode from 'rehype-expressive-code';
 import rehypeStringify from 'rehype-stringify';
 import type { PluggableList } from 'unified';
-import { SandboxRunner, SUPPORTED_LANGUAGES } from '../sandbox/SandboxRunner';
+import { SUPPORTED_LANGUAGES } from '../../api/generated-sandbox';
+import { SandboxRunner } from '../sandbox/SandboxRunner';
 
 const CACHE_MAX = 20;
 const renderCache = new Map<string, string>();
@@ -169,7 +170,15 @@ function injectSandboxContainers(
     const normalized = SUPPORTED_LANGUAGES[lang.toLowerCase()];
     if (!normalized) return;
 
-    const code = codeEl.textContent || '';
+    // Extract code line-by-line from .ec-line elements.
+    // rehype-expressive-code renders each line as <div class="ec-line">
+    // with no newline text nodes between them, so codeEl.textContent
+    // would concatenate all lines into a single string without line
+    // breaks (e.g. "line1line2" instead of "line1\nline2").
+    const lineEls = codeEl.querySelectorAll('.ec-line');
+    const code = lineEls.length > 0
+      ? Array.from(lineEls).map(el => el.textContent || '').join('\n')
+      : (codeEl.textContent || '');
     if (code.trim().length === 0) return;
 
     const portalDiv = document.createElement('div');

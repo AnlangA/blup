@@ -27,6 +27,12 @@ pub async fn create_pool(config: &StorageConfig) -> Result<Database, crate::erro
     sqlx::query("PRAGMA foreign_keys=ON;")
         .execute(&pool)
         .await?;
+    sqlx::query("PRAGMA synchronous=NORMAL;")
+        .execute(&pool)
+        .await?;
+    sqlx::query("PRAGMA cache_size=-64000;")
+        .execute(&pool)
+        .await?;
 
     tracing::info!(
         db_type = "sqlite",

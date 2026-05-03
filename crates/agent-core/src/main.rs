@@ -77,7 +77,7 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("Using MockExecutor for sandbox (BLUP_SANDBOX_MOCK=true)");
         let mut mock = sandbox_manager::MockExecutor::success_default();
         mock.set_response_fn(Box::new(|req| {
-            use sandbox_manager::models::request::ToolKind;
+            use sandbox_manager::ToolKind;
             use sandbox_manager::models::result::SandboxResult;
             use sandbox_manager::models::status::ExecutionStatus;
             use sandbox_manager::models::result::ResourceUsage;

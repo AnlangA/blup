@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::limits::SandboxLimits;
+use crate::generated::ToolKind;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxRequest {
@@ -13,38 +14,6 @@ pub struct SandboxRequest {
     pub limits: SandboxLimits,
     pub stdin: Option<String>,
     pub environment: Option<std::collections::HashMap<String, String>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolKind {
-    PythonExec,
-    NodeExec,
-    RustCompileRun,
-    MathEval,
-    TypstCompile,
-}
-
-impl ToolKind {
-    pub fn to_image(&self) -> &str {
-        match self {
-            ToolKind::PythonExec => "sandbox-python:latest",
-            ToolKind::NodeExec => "sandbox-node:latest",
-            ToolKind::RustCompileRun => "sandbox-rust:latest",
-            ToolKind::MathEval => "sandbox-math:latest",
-            ToolKind::TypstCompile => "sandbox-typst:latest",
-        }
-    }
-
-    pub fn to_language(&self) -> &str {
-        match self {
-            ToolKind::PythonExec => "python",
-            ToolKind::NodeExec => "javascript",
-            ToolKind::RustCompileRun => "rust",
-            ToolKind::MathEval => "math",
-            ToolKind::TypstCompile => "typst",
-        }
-    }
 }
 
 impl SandboxRequest {

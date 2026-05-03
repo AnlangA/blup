@@ -1,0 +1,42 @@
+name: sandbox-typescript
+description: TypeScript execution sandbox via ts-node
+dockerfile: sandboxes/docker/Dockerfile.typescript
+version: 1
+
+base_image:
+  name: node:22-slim
+  digest: sha256:placeholder
+
+pinned_packages:
+  - ts-node@10.9.2
+  - typescript@5.4
+
+build_args:
+  USER_ID: "1000"
+  USER_NAME: sandbox
+
+security:
+  seccomp_profile: sandboxes/policies/seccomp-python.json
+  read_only_rootfs: true
+  no_new_privileges: true
+  cap_drop: ["ALL"]
+
+limits:
+  compile_timeout_secs: 30
+  run_timeout_secs: 10
+  memory_mb: 512
+  cpu_count: 1
+  disk_mb: 200
+  max_processes: 10
+  network_enabled: false
+
+tests:
+  - name: node_version
+    command: ["node", "--version"]
+    expected_output: "v22"
+  - name: typescript_execution
+    command: ["sh", "-c", "echo 'const x: number = 1; console.log(x);' > /tmp/test.ts && ts-node --transpile-only /tmp/test.ts"]
+    expected_output: "1"
+  - name: network_blocked
+    command: ["node", "-e", "try { require('http').get('http://example.com'); } catch(e) { console.log('NETWORK_BLOCKED'); }"]
+    expected_output: "NETWORK_BLOCKED"

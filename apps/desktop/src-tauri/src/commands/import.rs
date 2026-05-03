@@ -15,6 +15,11 @@ pub struct ImportResult {
     pub language: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ImportJobResult {
+    pub job_id: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ImportError {
     pub code: String,
@@ -88,7 +93,15 @@ pub async fn import_file(
     );
 
     // Import via content pipeline
+    let job_id = state
+        .content_pipeline
+        .import_file_job(file_path.clone())
+        .await;
     let source_doc = state.content_pipeline.import_file(&file_path).await?;
+    if let Some(mut job) = state.content_pipeline.get_import_job(job_id).await {
+        job.mark_completed(source_doc.id);
+        state.content_pipeline.upsert_import_job(job).await;
+    }
 
     // Emit completion
     let _ = app.emit(
@@ -143,7 +156,12 @@ pub async fn import_website(
     );
 
     // Import via content pipeline
+    let job_id = state.content_pipeline.import_website_job(&url).await;
     let source_doc = state.content_pipeline.import_website(&url).await?;
+    if let Some(mut job) = state.content_pipeline.get_import_job(job_id).await {
+        job.mark_completed(source_doc.id);
+        state.content_pipeline.upsert_import_job(job).await;
+    }
 
     // Emit completion
     let _ = app.emit(

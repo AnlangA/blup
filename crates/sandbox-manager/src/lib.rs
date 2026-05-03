@@ -2,11 +2,13 @@ pub mod config;
 pub mod docker;
 pub mod error;
 pub mod executor;
+pub mod generated;
 pub mod models;
 
 pub use config::SandboxConfig;
 pub use error::SandboxError;
 pub use executor::{DockerExecutor, MockExecutor, SandboxExecutor};
+pub use generated::{ExecutionModel, ToolKind};
 pub use models::request::SandboxRequest;
 pub use models::result::SandboxResult;
 pub use models::status::ExecutionStatus;
@@ -45,7 +47,8 @@ impl SandboxManager {
 mod tests {
     use super::*;
     use crate::models::limits::SandboxLimits;
-    use crate::models::request::{SandboxRequest, ToolKind};
+    use crate::generated::ToolKind;
+    use crate::models::request::SandboxRequest;
     use crate::models::result::ResourceUsage;
     use crate::models::status::ExecutionStatus;
 

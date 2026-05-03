@@ -210,4 +210,27 @@ impl Storage {
     ) -> Result<Vec<serde_json::Value>, StorageError> {
         models::assessment::get_assessments(self.pool(), session_id).await
     }
+
+    // Content pipeline operations
+    pub async fn save_source_document(
+        &self,
+        session_id: Option<Uuid>,
+        document: &models::content::StoredSourceDocument<'_>,
+    ) -> Result<(), StorageError> {
+        models::content::save_source_document(self.pool(), session_id, document).await
+    }
+
+    pub async fn save_import_job(
+        &self,
+        job: &models::content::StoredImportJob<'_>,
+    ) -> Result<(), StorageError> {
+        models::content::save_import_job(self.pool(), job).await
+    }
+
+    pub async fn save_export_job(
+        &self,
+        job: &models::content::StoredExportJob<'_>,
+    ) -> Result<(), StorageError> {
+        models::content::save_export_job(self.pool(), job).await
+    }
 }

@@ -18,7 +18,7 @@
     },
     "tool_kind": {
       "type": "string",
-      "enum": ["python_exec", "node_exec", "rust_compile_run", "math_eval", "typst_compile"],
+      "enum": ["python_exec", "node_exec", "typescript_compile_run", "rust_compile_run", "go_compile_run", "c_compile_run", "cpp_compile_run", "java_compile_run", "ruby_exec", "bash_exec", "typst_compile"],
       "description": "Type of sandbox tool to use"
     },
     "code": {
@@ -27,7 +27,7 @@
     },
     "language": {
       "type": "string",
-      "enum": ["python", "javascript", "rust", "latex", "math"],
+      "enum": ["python", "javascript", "typescript", "rust", "go", "c", "cpp", "java", "ruby", "bash", "typst"],
       "description": "Programming language"
     },
     "limits": {

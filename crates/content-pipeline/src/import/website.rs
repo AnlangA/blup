@@ -8,6 +8,9 @@ use crate::models::{ExtractionMethod, SourceChunk, SourceDocument, SourceMetadat
 pub async fn import_website(url: &str) -> Result<SourceDocument, ImportError> {
     // 1. Validate URL
     let parsed = url::Url::parse(url).map_err(|_| ImportError::InvalidUrl(url.to_string()))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(ImportError::InvalidUrl(url.to_string()));
+    }
 
     // 2. Security: reject internal/private URLs
     let host = parsed
@@ -23,6 +26,7 @@ pub async fn import_website(url: &str) -> Result<SourceDocument, ImportError> {
     // 3. Fetch URL content
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::limited(5))
         .user_agent("Blup-ContentImporter/1.0")
         .build()
         .map_err(|e| ImportError::FetchFailed {
@@ -44,6 +48,15 @@ pub async fn import_website(url: &str) -> Result<SourceDocument, ImportError> {
             url: url.to_string(),
             reason: format!("HTTP {}", response.status()),
         });
+    }
+
+    if let Some(final_host) = response.url().host_str() {
+        if is_private_host(final_host) {
+            return Err(ImportError::UrlBlocked {
+                url: response.url().to_string(),
+                reason: "Cannot import from internal/private URLs after redirects".to_string(),
+            });
+        }
     }
 
     let html = response

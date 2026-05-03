@@ -1,0 +1,40 @@
+name: sandbox-go
+description: Go compilation and execution sandbox for code exercises
+dockerfile: sandboxes/docker/Dockerfile.go
+version: 1
+
+base_image:
+  name: golang:1.22-alpine
+  digest: sha256:placeholder
+
+pinned_packages: []
+
+build_args:
+  USER_ID: "1000"
+  USER_NAME: sandbox
+
+security:
+  seccomp_profile: sandboxes/policies/seccomp-python.json
+  read_only_rootfs: true
+  no_new_privileges: true
+  cap_drop: ["ALL"]
+
+limits:
+  compile_timeout_secs: 30
+  run_timeout_secs: 10
+  memory_mb: 512
+  cpu_count: 1
+  disk_mb: 300
+  max_processes: 10
+  network_enabled: false
+
+tests:
+  - name: go_version
+    command: ["go", "version"]
+    expected_output: "go1.22"
+  - name: compile_and_run
+    command: ["sh", "-c", "echo 'package main; func main() { println(\"hello\") }' > /tmp/main.go && cd /tmp && go build -o test main.go && ./test"]
+    expected_output: "hello"
+  - name: network_blocked
+    command: ["sh", "-c", "timeout 5 wget -q http://example.com 2>/dev/null && echo 'NETWORK_ACCESSIBLE' || echo 'NETWORK_BLOCKED'"]
+    expected_output: "NETWORK_BLOCKED"
