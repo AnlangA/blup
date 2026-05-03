@@ -50,6 +50,8 @@ impl MockProvider {
     pub fn with_default_responses() -> Self {
         let mock = Self::new();
         mock.push_response(r#"{"feasible":true,"reason":"This is a well-defined learning goal.","suggestions":["Start with fundamentals","Practice regularly"],"estimated_duration":"4 weeks","prerequisites":["Basic computer skills"]}"#);
+        mock.push_response(r#"{"next_question":"What learning format works best for you?"}"#);
+        mock.push_response(r#"{"next_question":"How much time can you dedicate each week?"}"#);
         mock.push_response(r#"{"experience_level":{"domain_knowledge":"beginner"},"learning_style":{"preferred_format":["text","interactive"],"pace_preference":"moderate"},"available_time":{"hours_per_week":10,"preferred_session_length_minutes":60}}"#);
         mock.push_response(r#"{"title":"Learning Plan","description":"A structured curriculum","chapters":[{"id":"ch1","title":"Introduction","order":1,"objectives":["Understand basics"],"estimated_minutes":30,"prerequisites":[]},{"id":"ch2","title":"Core Concepts","order":2,"objectives":["Master fundamentals"],"estimated_minutes":45,"prerequisites":["ch1"]}],"estimated_duration":"3 weeks","learning_objectives":["Understand basics","Master fundamentals"]}"#);
         mock.push_response("# Chapter 1: Introduction\n\nWelcome to this chapter. Here we will explore the fundamental concepts...");

@@ -8,10 +8,17 @@ Generate a complete learner profile from the user's answers about their experien
 - **answer**: `{{answer}}`
 - **round**: `{{round}}`
 - **is_final**: `{{is_final}}`
+- **profile_history**: `{{profile_history}}`
 </input>
 
 <instructions>
-Infer the learner's profile from the current answer plus the target `learning_goal` and `domain`. The current answer may cover only one part of the profile, so infer conservatively and use defaults for anything that is missing, vague, or only weakly implied.
+Infer the learner's profile from the current answer, the prior `profile_history`, and the target `learning_goal` / `domain`.
+
+- `profile_history` contains the earlier profile Q&A turns already collected in this session.
+- Use it to avoid repeating the same question and to carry earlier signals into the final profile.
+- The current answer may cover only one part of the profile, so infer conservatively and use defaults for anything that is missing, vague, or only weakly implied.
+- When `is_final` is `false`, do NOT produce the full profile yet. Ask the single highest-value next question needed to complete the profile.
+- When `is_final` is `true`, produce the final learner profile using the full accumulated evidence.
 
 **Goal and Domain Alignment**
 - Assess `experience_level.domain_knowledge` relative to the target learning goal, not just general adjacent experience.
@@ -76,6 +83,14 @@ Apply these mapping rules:
 </instructions>
 
 <output_format>
+When `is_final` is false, return ONLY a JSON object with this exact shape:
+
+```json
+{
+  "next_question": "One concise follow-up question"
+}
+```
+
 When `is_final` is true, return ONLY a JSON object (no markdown fences, no explanation) using only fields from `schemas/user_profile.v1.schema.json`.
 
 Include the required fields below. Optional fields may be included only when they are explicitly stated or strongly implied:
@@ -114,6 +129,8 @@ Schema reference: `schemas/user_profile.v1.schema.json`
 </output_format>
 
 <constraints>
+- When `is_final` is false, the response MUST contain only `{"next_question":"..."}` and the question must be a single, concrete follow-up question.
+- When `is_final` is false, ask about the most important missing signal instead of repeating something already answered in `profile_history`.
 - `experience_level.domain_knowledge` MUST be exactly one of: "none", "beginner", "intermediate", "advanced". No other values.
 - `learning_style.preferred_format` MUST be a non-empty array. Each value MUST be from the allowed list.
 - `available_time.hours_per_week` MUST be a number between 0.5 and 80.

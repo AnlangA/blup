@@ -171,24 +171,33 @@ impl AgentEngine {
         vars.insert("answer".to_string(), ctx.answer.clone());
         vars.insert("round".to_string(), ctx.round.to_string());
         vars.insert("is_final".to_string(), ctx.is_final.to_string());
+        vars.insert(
+            "profile_history".to_string(),
+            serde_json::to_string(&ctx.profile_history).unwrap_or_default(),
+        );
         let system_prompt = self
             .prompts
             .load_and_render("profile_collection", 1, &vars)
             .map_err(AgentError::from)?;
-        let round_desc = match ctx.round {
-            1 => "experience level",
-            2 => "learning preferences",
-            _ => "",
-        };
         let user_prompt = if ctx.is_final {
             format!(
-                "Final round. Build the complete profile. Goal: {}\nDomain: {}\nLatest answer: {}",
-                ctx.learning_goal, ctx.domain, ctx.answer
+                "Final round {}/{}. Build the complete learner profile from the full profile history plus the latest answer.\nGoal: {}\nDomain: {}\nProfile history: {}\nLatest answer: {}",
+                ctx.round,
+                ctx.total_rounds,
+                ctx.learning_goal,
+                ctx.domain,
+                serde_json::to_string_pretty(&ctx.profile_history).unwrap_or_default(),
+                ctx.answer
             )
         } else {
             format!(
-                "Profile collection round {}/{}: {round_desc}. User answer: {}",
-                ctx.round, ctx.total_rounds, ctx.answer
+                "Profile collection round {}/{}.\nGoal: {}\nDomain: {}\nProfile history so far: {}\nLatest answer: {}\nReturn the single most useful next follow-up question as JSON.",
+                ctx.round,
+                ctx.total_rounds,
+                ctx.learning_goal,
+                ctx.domain,
+                serde_json::to_string_pretty(&ctx.profile_history).unwrap_or_default(),
+                ctx.answer
             )
         };
         if ctx.is_final {
@@ -202,11 +211,21 @@ impl AgentEngine {
                 .await?;
             Ok(ProfileStep::Complete { profile })
         } else {
-            let next_hint = match ctx.round {
-                1 => "How would you describe your preferred learning style?".to_string(),
-                2 => "How much time can you dedicate each week?".to_string(),
-                _ => "Tell me more about your background.".to_string(),
-            };
+            let follow_up = self
+                .llm_json_unvalidated(&system_prompt, &user_prompt, "profile_followup")
+                .await?;
+            let next_hint = follow_up
+                .get("next_question")
+                .and_then(|value| value.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    AgentError::JsonParse(
+                        "Profile follow-up response must contain a non-empty `next_question` string"
+                            .to_string(),
+                    )
+                })?
+                .to_string();
             Ok(ProfileStep::Intermediate {
                 round: ctx.round,
                 total_rounds: ctx.total_rounds,
@@ -470,6 +489,51 @@ impl AgentEngine {
         tracing::info!(operation = operation, model = %response.model, tokens = response.usage.total_tokens, content_length = response.content.len(), duration_ms = duration_ms, "LLM text call completed");
         Ok(response.content)
     }
+
+    async fn llm_json_unvalidated(
+        &self,
+        system_prompt: &str,
+        user_prompt: &str,
+        operation: &str,
+    ) -> Result<serde_json::Value, AgentError> {
+        let request = make_request(&self.config, system_prompt, user_prompt, false);
+        let start = Instant::now();
+        let response = self.provider.complete(request).await.map_err(|e| {
+            if let Some(ref audit) = self.audit {
+                audit.log_llm_call(
+                    "unknown",
+                    self.provider.name(),
+                    self.provider.model(),
+                    &Default::default(),
+                    start.elapsed().as_millis() as u64,
+                    false,
+                    Some(e.to_string()),
+                );
+            }
+            AgentError::from(e)
+        })?;
+        let duration_ms = start.elapsed().as_millis() as u64;
+        let json_str = extract_json(&response.content);
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+            let truncated: String = response.content.chars().take(400).collect();
+            AgentError::JsonParse(format!(
+                "LLM response was not valid JSON: {e}. Raw (truncated): {truncated}"
+            ))
+        })?;
+        if let Some(ref audit) = self.audit {
+            audit.log_llm_call(
+                "session",
+                self.provider.name(),
+                self.provider.model(),
+                &response.usage,
+                duration_ms,
+                true,
+                None,
+            );
+        }
+        tracing::info!(operation = operation, model = %response.model, tokens = response.usage.total_tokens, duration_ms = duration_ms, "LLM JSON call completed");
+        Ok(parsed)
+    }
 }
 
 fn make_request(
@@ -572,6 +636,10 @@ mod tests {
                 round: 3,
                 total_rounds: 3,
                 is_final: true,
+                profile_history: json!([
+                    {"role":"user","content":"I am new to programming"},
+                    {"role":"assistant","content":"How do you like to learn?"}
+                ]),
             })
             .await;
         assert!(
@@ -589,7 +657,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_collect_profile_intermediate() {
-        let engine = test_engine_with_response("{}").await;
+        let engine = test_engine_with_response(
+            r#"{"next_question":"How much time can you dedicate each week?"}"#,
+        )
+        .await;
         let result = engine
             .collect_profile(&ProfileContext {
                 learning_goal: "Learn Python".to_string(),
@@ -598,11 +669,22 @@ mod tests {
                 round: 1,
                 total_rounds: 3,
                 is_final: false,
+                profile_history: json!([]),
             })
             .await;
         assert!(result.is_ok());
         match result.unwrap() {
-            ProfileStep::Intermediate { round, .. } => assert_eq!(round, 1),
+            ProfileStep::Intermediate {
+                round,
+                next_question_hint,
+                ..
+            } => {
+                assert_eq!(round, 1);
+                assert_eq!(
+                    next_question_hint,
+                    "How much time can you dedicate each week?"
+                );
+            }
             ProfileStep::Complete { .. } => panic!("Expected intermediate"),
         }
     }

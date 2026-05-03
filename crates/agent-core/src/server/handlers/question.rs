@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use blup_agent::step::*;
 
-use super::helpers::{default_profile_json, load_or_404};
+use super::helpers::{build_curriculum_context, default_profile_json, load_or_404};
 use super::types::QuestionRequest;
 use crate::error::ApiError;
 use crate::state::domain::SessionMessage;
@@ -55,11 +55,7 @@ pub async fn ask_question(
             })
             .collect();
 
-        let curriculum = s
-            .curriculum
-            .clone()
-            .map(|c| serde_json::to_value(c).unwrap_or(json!({"title": "Unknown", "chapters": []})))
-            .unwrap_or(json!({"title": "Unknown", "chapters": []}));
+        let curriculum = build_curriculum_context(s.curriculum.as_ref(), &ch_id);
 
         (
             profile,

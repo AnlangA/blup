@@ -3,21 +3,19 @@
   "description": "Answer a factual question about the chapter content",
   "prompt_name": "question_answering",
   "prompt_version": 1,
-  "target_schema": "message.v1.schema.json",
   "input": {
     "question": "What is a variable in programming?",
     "user_profile": "{\"experience_level\":{\"domain_knowledge\":\"beginner\"},\"learning_style\":{\"preferred_format\":[\"text\"]},\"available_time\":{\"hours_per_week\":5}}",
-    "chapter_content": "Variables store data in programs. In Python, you create a variable by assigning a value: `name = 'Alice'`. Variables can hold different types of data including strings, numbers, and lists.",
+    "chapter": "Variables store data in programs. In Python, you create a variable by assigning a value: `name = 'Alice'`. Variables can hold different types of data including strings, numbers, and lists.",
     "conversation_history": "[]",
     "curriculum_context": "{\"title\":\"Python Fundamentals\"}"
   },
-  "expected_output": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "role": "assistant",
-    "content": "A variable is a named storage location in a program that holds data. Think of it as a labeled box — you put a value in it and can refer to it by its name later. For example, `score = 100` creates a variable called 'score' containing the value 100.",
-    "timestamp": "2025-01-15T10:30:00Z",
-    "chapter_id": "python-basics",
-    "content_type": "explanation"
+  "render_checks": {
+    "must_contain": [
+      "What is a variable in programming?",
+      "Python Fundamentals",
+      "Use `bash` for shell commands and `text` for plain-text output"
+    ]
   },
   "semantic_checks": [],
   "captured_from": null,

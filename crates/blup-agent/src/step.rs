@@ -46,6 +46,7 @@ pub struct ProfileContext {
     pub round: u32,
     pub total_rounds: u32,
     pub is_final: bool,
+    pub profile_history: serde_json::Value,
 }
 
 /// Context for curriculum generation.

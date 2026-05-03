@@ -43,7 +43,7 @@ else
 fi
 
 # 2. Rust linting
-run_check "cargo clippy" "cargo clippy --all-targets --all-features -- -D warnings 2>/dev/null || true"
+run_check "cargo clippy" "cargo clippy --all-targets --all-features -- -D warnings"
 
 # 3. Rust tests (all workspace members)
 if ! $SKIP_TESTS; then
@@ -59,7 +59,7 @@ if [ -f "apps/web-ui/package.json" ]; then
     run_check "npm run typecheck" "npm run typecheck"
     run_check "npm run lint" "npm run lint"
     if ! $SKIP_TESTS; then
-        run_check "npm test" "npm test -- --run 2>/dev/null || true"
+        run_check "npm test" "npm test -- --run"
     fi
     cd ../..
 fi

@@ -3,35 +3,20 @@
   "description": "First round of profile collection for a complete beginner",
   "prompt_name": "profile_collection",
   "prompt_version": 1,
-  "target_schema": "user_profile.v1.schema.json",
   "input": {
     "learning_goal": "Learn Python for data analysis",
     "domain": "programming",
     "answer": "I have no programming experience at all",
     "round": "1",
-    "is_final": "false"
+    "is_final": "false",
+    "profile_history": "[]"
   },
-  "expected_output": {
-    "experience_level": {
-      "domain_knowledge": "beginner",
-      "related_domains": ["excel"],
-      "years_of_experience": 0
-    },
-    "learning_style": {
-      "preferred_format": ["text", "exercise-based"],
-      "pace_preference": "moderate"
-    },
-    "available_time": {
-      "hours_per_week": 5,
-      "preferred_session_length_minutes": 45
-    },
-    "goals": {
-      "primary_goal": "Automate Excel workflows with Python"
-    },
-    "preferences": {
-      "language": "en",
-      "difficulty_bias": "standard"
-    }
+  "render_checks": {
+    "must_contain": [
+      "Learn Python for data analysis",
+      "When `is_final` is false, return ONLY a JSON object with this exact shape:",
+      "\"next_question\": \"One concise follow-up question\""
+    ]
   },
   "semantic_checks": [],
   "captured_from": null,

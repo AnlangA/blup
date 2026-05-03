@@ -23,7 +23,20 @@ pub fn make_mock_provider() -> MockProvider {
         })
         .to_string(),
     );
-    // Response 2: profile collection (final round)
+    // Response 2-3: profile collection follow-up questions
+    mock.push_response(
+        serde_json::json!({
+            "next_question": "What learning format works best for you?"
+        })
+        .to_string(),
+    );
+    mock.push_response(
+        serde_json::json!({
+            "next_question": "How much time can you dedicate each week?"
+        })
+        .to_string(),
+    );
+    // Response 4: profile collection (final round)
     mock.push_response(
         serde_json::json!({
             "experience_level": {
@@ -52,7 +65,7 @@ pub fn make_mock_provider() -> MockProvider {
         })
         .to_string(),
     );
-    // Response 3: curriculum plan
+    // Response 5: curriculum plan
     mock.push_response(
         serde_json::json!({
             "title": "Python Data Analysis",
@@ -81,7 +94,7 @@ pub fn make_mock_provider() -> MockProvider {
         })
         .to_string(),
     );
-    // Response 4-8: chapter teaching / Q&A (5 extra text responses)
+    // Response 6+: chapter teaching / Q&A / repair text responses
     for _ in 0..10 {
         mock.push_response("# Chapter Content\n\nThis is the chapter teaching content with explanations and examples.\n\n## Key Concepts\n\n- Concept 1\n- Concept 2\n\n## Examples\n\nHere are some practical examples.");
     }

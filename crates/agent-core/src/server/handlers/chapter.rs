@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use blup_agent::step::*;
 
-use super::helpers::{default_profile_json, load_or_404, next_sse_id};
+use super::helpers::{build_curriculum_context, default_profile_json, load_or_404, next_sse_id};
 use super::types::SseEvent;
 use crate::error::ApiError;
 use crate::state::domain as d;
@@ -90,7 +90,7 @@ pub async fn start_chapter(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let handle = load_or_404(&state, id).await?;
 
-    let (chapter_title, profile_json) = {
+    let (chapter_title, profile_json, curriculum_context) = {
         let s = handle.read().await;
         let current = s.state();
         if current != crate::state::types::SessionState::ChapterLearning {
@@ -127,7 +127,8 @@ pub async fn start_chapter(
                 }))
             })
             .unwrap_or_else(default_profile_json);
-        (title, profile)
+        let curriculum_context = build_curriculum_context(s.curriculum.as_ref(), &ch_id);
+        (title, profile, curriculum_context)
     };
 
     let content = state
@@ -136,7 +137,7 @@ pub async fn start_chapter(
             chapter_id: ch_id.clone(),
             chapter_title: chapter_title.clone(),
             profile: profile_json,
-            curriculum_context: json!({}),
+            curriculum_context,
         })
         .await
         .map_err(ApiError::from)?;
@@ -166,7 +167,7 @@ pub async fn start_chapter_stream(
 ) -> Result<Sse<impl futures::Stream<Item = Result<Event, axum::Error>>>, ApiError> {
     let handle = load_or_404(&state, id).await?;
 
-    let (cached, chapter_title, profile_json) = {
+    let (cached, chapter_title, profile_json, curriculum_context) = {
         let s = handle.read().await;
         let current = s.state();
         if current != crate::state::types::SessionState::ChapterLearning {
@@ -197,7 +198,9 @@ pub async fn start_chapter_stream(
             })
             .unwrap_or_else(default_profile_json);
 
-        (cached, title, profile)
+        let curriculum_context = build_curriculum_context(s.curriculum.as_ref(), &ch_id);
+
+        (cached, title, profile, curriculum_context)
     };
 
     let ping_interval = std::time::Duration::from_secs(state.config.sse_ping_interval_secs);
@@ -231,7 +234,7 @@ pub async fn start_chapter_stream(
             chapter_id: stream_ch_id.clone(),
             chapter_title: chapter_title.clone(),
             profile: profile_json,
-            curriculum_context: json!({}),
+            curriculum_context,
         });
 
         let mut agent_stream = std::pin::pin!(agent_stream);

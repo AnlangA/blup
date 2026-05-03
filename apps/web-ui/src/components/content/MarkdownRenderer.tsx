@@ -100,9 +100,10 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
       executeScripts(containerRef.current);
       injectSandboxContainers(containerRef.current, setCodeBlocks, portalCleanupRef);
     }
+    const cleanup = portalCleanupRef.current;
     return () => {
-      if (portalCleanupRef.current) {
-        portalCleanupRef.current();
+      if (cleanup) {
+        cleanup();
       }
     };
   }, [html]);

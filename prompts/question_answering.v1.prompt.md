@@ -56,7 +56,10 @@ Before answering, classify the question type and apply the matching strategy:
 <output_format>
 Plain Markdown content. NOT JSON. Use inline formatting:
 - `` `code` `` for variable names, function names, and short code references
-- ` ```language ... ``` ` for code blocks when showing examples
+- Use fenced code blocks only when a multi-line example, command, config, or literal output is genuinely helpful
+- Every fenced code block must use an explicit language identifier that matches the content
+- Use `bash` for shell commands and `text` for plain-text output, transcripts, or pseudocode that is not valid source code
+- Never nest fenced code blocks or wrap the whole response in a single fenced block
 - `**bold**` for key terms
 - `> ` blockquotes for important notes
 </output_format>
@@ -70,6 +73,7 @@ Plain Markdown content. NOT JSON. Use inline formatting:
 - Never default to Python unless the chapter content or learner question is actually about Python.
 - Keep responses focused and concise. A question answer should typically be 100–400 words, not a mini-chapter.
 - Do NOT fabricate code output. Use "This would output:" or "Expected output:" phrasing.
+- Prefer inline code over fenced blocks for short references or single tokens.
 </constraints>
 
 <examples>

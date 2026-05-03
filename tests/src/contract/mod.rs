@@ -1,6 +1,31 @@
 use agent_core::state::domain as d;
+use blup_agent::prompt::PromptLoader;
 use blup_agent::schema::SchemaValidator;
+use serde::Deserialize;
 use serde_json::json;
+use std::collections::HashMap;
+
+#[derive(Debug, Deserialize)]
+struct PromptFixture {
+    fixture_id: String,
+    prompt_name: String,
+    prompt_version: u32,
+    input: HashMap<String, String>,
+    #[serde(default)]
+    target_schema: Option<String>,
+    #[serde(default)]
+    expected_output: Option<serde_json::Value>,
+    #[serde(default)]
+    render_checks: RenderChecks,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RenderChecks {
+    #[serde(default)]
+    must_contain: Vec<String>,
+    #[serde(default)]
+    must_not_contain: Vec<String>,
+}
 
 /// Verify that all Phase 1 API response schemas can be loaded and compiled.
 #[test]
@@ -301,5 +326,112 @@ fn test_all_invalid_fixtures_fail_validation() {
     assert!(
         checked > 0,
         "Should have validated at least one invalid fixture"
+    );
+}
+
+#[test]
+fn test_prompt_fixtures_render_without_missing_variables() {
+    let loader = PromptLoader::new("../prompts");
+    let fixture_root = std::path::Path::new("../prompts/fixtures");
+
+    let mut checked = 0usize;
+    for prompt_entry in
+        std::fs::read_dir(fixture_root).expect("prompt fixtures directory must exist")
+    {
+        let prompt_dir = prompt_entry.unwrap();
+        if !prompt_dir.path().is_dir() {
+            continue;
+        }
+        for file_entry in std::fs::read_dir(prompt_dir.path()).unwrap() {
+            let path = file_entry.unwrap().path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                continue;
+            }
+
+            let content = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+            let fixture: PromptFixture = serde_json::from_str(&content)
+                .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", path.display()));
+
+            let rendered = loader
+                .load_and_render(&fixture.prompt_name, fixture.prompt_version, &fixture.input)
+                .unwrap_or_else(|e| panic!("Failed to render fixture {}: {e}", fixture.fixture_id));
+
+            assert!(
+                !rendered.contains("{{"),
+                "Rendered prompt {} still contains unresolved placeholders",
+                fixture.fixture_id
+            );
+
+            for needle in &fixture.render_checks.must_contain {
+                assert!(
+                    rendered.contains(needle),
+                    "Rendered prompt {} should contain {:?}",
+                    fixture.fixture_id,
+                    needle
+                );
+            }
+
+            for needle in &fixture.render_checks.must_not_contain {
+                assert!(
+                    !rendered.contains(needle),
+                    "Rendered prompt {} should not contain {:?}",
+                    fixture.fixture_id,
+                    needle
+                );
+            }
+
+            checked += 1;
+        }
+    }
+
+    assert!(checked > 0, "Should render at least one prompt fixture");
+}
+
+#[test]
+fn test_prompt_fixture_expected_outputs_match_declared_schemas() {
+    let validator = SchemaValidator::new("../schemas");
+    let fixture_root = std::path::Path::new("../prompts/fixtures");
+
+    let mut checked = 0usize;
+    for prompt_entry in
+        std::fs::read_dir(fixture_root).expect("prompt fixtures directory must exist")
+    {
+        let prompt_dir = prompt_entry.unwrap();
+        if !prompt_dir.path().is_dir() {
+            continue;
+        }
+        for file_entry in std::fs::read_dir(prompt_dir.path()).unwrap() {
+            let path = file_entry.unwrap().path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                continue;
+            }
+
+            let content = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+            let fixture: PromptFixture = serde_json::from_str(&content)
+                .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", path.display()));
+
+            let (Some(target_schema), Some(expected_output)) = (
+                fixture.target_schema.as_deref(),
+                fixture.expected_output.as_ref(),
+            ) else {
+                continue;
+            };
+
+            let schema_name = target_schema.split(".v").next().unwrap_or(target_schema);
+            assert!(
+                validator.validate(expected_output, schema_name).is_ok(),
+                "Prompt fixture {} expected output should validate against schema {}",
+                fixture.fixture_id,
+                schema_name
+            );
+            checked += 1;
+        }
+    }
+
+    assert!(
+        checked > 0,
+        "Should validate at least one prompt fixture expected output"
     );
 }

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use agent_core::state::machine::StateMachine;
 use agent_core::state::types::{SessionState, Transition};
+use blup_agent::prompt::PromptError;
 use blup_agent::prompt::PromptLoader;
 use blup_agent::schema::SchemaValidator;
 use serde_json::json;
@@ -239,6 +240,24 @@ fn test_prompt_loader_renders_variables() {
 }
 
 #[test]
+fn test_prompt_loader_reports_missing_variables() {
+    let loader = PromptLoader::new("../prompts");
+    let mut vars = HashMap::new();
+    vars.insert("learning_goal".to_string(), "Learn Python".to_string());
+
+    let err = loader
+        .load_and_render("feasibility_check", 1, &vars)
+        .unwrap_err();
+    match err {
+        PromptError::MissingVariables { missing, .. } => {
+            assert!(missing.contains(&"domain".to_string()));
+            assert!(missing.contains(&"context".to_string()));
+        }
+        other => panic!("Expected missing-variable error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_prompt_loader_template_not_found() {
     let loader = PromptLoader::new("../prompts");
     let result = loader.load("nonexistent_template", 1);
@@ -277,6 +296,9 @@ fn test_chapter_teaching_prompt_no_longer_hardcodes_python() {
     assert!(!prompt.contains("```python"));
     assert!(prompt.contains("Never switch to Python by default."));
     assert!(prompt.contains("If you include a code block, it MUST use the language identifier that matches the subject matter"));
+    assert!(prompt.contains(
+        "Use `bash` for shell commands, `text` for literal output or non-runnable transcripts"
+    ));
 }
 
 #[test]
@@ -288,6 +310,35 @@ fn test_chapter_teaching_prompt_includes_table_safety_rules() {
     assert!(prompt.contains("If a table cell contains a literal pipe character `|`, you MUST escape it as `\\|` or wrap the whole cell content in inline code."));
     assert!(prompt
         .contains("Never output clipboard or editor placeholder text such as `[Pasted ~2 lines]`"));
+}
+
+#[test]
+fn test_question_answering_prompt_includes_code_block_rules() {
+    let loader = PromptLoader::new("../prompts");
+    let prompt = loader.load("question_answering", 1).unwrap();
+
+    assert!(prompt.contains(
+        "Use fenced code blocks only when a multi-line example, command, config, or literal output is genuinely helpful"
+    ));
+    assert!(prompt.contains(
+        "Use `bash` for shell commands and `text` for plain-text output, transcripts, or pseudocode that is not valid source code"
+    ));
+    assert!(prompt.contains(
+        "Never nest fenced code blocks or wrap the whole response in a single fenced block"
+    ));
+}
+
+#[test]
+fn test_chapter_markdown_repair_prompt_preserves_code_block_formatting() {
+    let loader = PromptLoader::new("../prompts");
+    let prompt = loader.load("chapter_markdown_repair", 1).unwrap();
+
+    assert!(prompt.contains(
+        "If the chapter contains code blocks, keep fences balanced and preserve the intended separation between prose, code, commands, and output."
+    ));
+    assert!(prompt
+        .contains("Preserve an existing code fence language identifier when it is still correct."));
+    assert!(prompt.contains("Do NOT nest fenced code blocks."));
 }
 
 #[test]
@@ -447,6 +498,7 @@ async fn test_profile_answer_multi_round() {
     assert_eq!(status, 200);
     assert!(!body["is_complete"].as_bool().unwrap());
     assert_eq!(body["round"], 1);
+    assert!(body["next_question"].as_str().unwrap().contains('?'));
 
     // Round 2 — not complete
     let (status, body) = h
@@ -458,6 +510,7 @@ async fn test_profile_answer_multi_round() {
     assert_eq!(status, 200);
     assert!(!body["is_complete"].as_bool().unwrap());
     assert_eq!(body["round"], 2);
+    assert!(body["next_question"].as_str().unwrap().contains('?'));
 
     // Round 3 — complete!
     let (status, body) = h
@@ -510,11 +563,11 @@ async fn test_chapter_start_and_cache() {
 async fn test_chapter_generation_repairs_invalid_markdown_before_caching() {
     let mock = make_mock_provider();
     mock.replace_response(
-        3,
+        5,
         "## Logic Operators\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | A || B |\n\n[Pasted ~2 lines]",
     );
     mock.replace_response(
-        4,
+        6,
         "## Logic Operators\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | `A || B` |",
     );
 
@@ -536,11 +589,11 @@ async fn test_chapter_generation_repairs_invalid_markdown_before_caching() {
 async fn test_chapter_generation_returns_validation_error_after_failed_repair() {
     let mock = make_mock_provider();
     mock.replace_response(
-        3,
+        5,
         "## Logic Operators\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | A || B |\n\n[Pasted ~2 lines]",
     );
     mock.replace_response(
-        4,
+        6,
         "## Still Broken\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | A || B |\n\n[Pasted ~2 lines]",
     );
 
@@ -744,11 +797,11 @@ async fn test_sse_chapter_stream_validation_error_clears_partial_cache() {
 
     let mock = make_mock_provider();
     mock.replace_response(
-        3,
+        5,
         "## Logic Operators\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | A || B |\n| AND | Both must be true | A && B |\n\n[Pasted ~2 lines]",
     );
     mock.replace_response(
-        4,
+        6,
         "## Still Broken\n\n| Operator | Meaning | Example |\n|---|---|---|\n| OR | At least one must be true | A || B |\n\n[Pasted ~2 lines]",
     );
 
@@ -772,7 +825,10 @@ async fn test_sse_chapter_stream_validation_error_clears_partial_cache() {
         }
     }
 
-    assert!(has_validation_error, "chapter stream should report validation failure");
+    assert!(
+        has_validation_error,
+        "chapter stream should report validation failure"
+    );
 
     let (status, session) = h.get(&format!("/api/session/{sid}")).await;
     assert_eq!(status, 200);

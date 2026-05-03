@@ -10,6 +10,13 @@ pub enum PromptError {
 
     #[error("Template not found: {name} v{version}")]
     NotFound { name: String, version: u32 },
+
+    #[error("Missing prompt variables for {name} v{version}: {missing:?}")]
+    MissingVariables {
+        name: String,
+        version: u32,
+        missing: Vec<String>,
+    },
 }
 
 /// Loads and renders versioned prompt templates with shared partials.
@@ -119,6 +126,14 @@ impl PromptLoader {
         parts.push(&template);
 
         let combined = parts.join("\n\n---\n\n");
+        let missing = Self::missing_variables(&combined, vars);
+        if !missing.is_empty() {
+            return Err(PromptError::MissingVariables {
+                name: name.to_string(),
+                version,
+                missing,
+            });
+        }
         Ok(Self::render_template(&combined, vars))
     }
 
@@ -141,6 +156,36 @@ impl PromptLoader {
     pub fn reload_partials(&mut self) {
         self.shared_partials = Self::load_shared_partials(&self.templates_dir);
         self.cache.write().expect("RwLock poisoned").clear();
+    }
+
+    fn missing_variables(template: &str, vars: &HashMap<String, String>) -> Vec<String> {
+        let mut missing = Self::placeholders(template)
+            .into_iter()
+            .filter(|placeholder| !vars.contains_key(placeholder))
+            .collect::<Vec<_>>();
+        missing.sort();
+        missing.dedup();
+        missing
+    }
+
+    fn placeholders(template: &str) -> Vec<String> {
+        let mut placeholders = Vec::new();
+        let mut cursor = 0usize;
+
+        while let Some(open_offset) = template[cursor..].find("{{") {
+            let start = cursor + open_offset + 2;
+            let Some(close_offset) = template[start..].find("}}") else {
+                break;
+            };
+            let end = start + close_offset;
+            let placeholder = template[start..end].trim();
+            if !placeholder.is_empty() {
+                placeholders.push(placeholder.to_string());
+            }
+            cursor = end + 2;
+        }
+
+        placeholders
     }
 }
 

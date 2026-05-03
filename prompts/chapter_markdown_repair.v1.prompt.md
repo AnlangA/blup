@@ -22,6 +22,8 @@ Your job is to return a repaired Markdown version that preserves the teaching co
 - Repair malformed Markdown tables so every row has the same column count.
 - If a table cell contains a literal pipe character `|`, escape it as `\|` or wrap the content in inline code.
 - If a table cannot be repaired safely, rewrite only that table as a bullet list or short prose comparison.
+- If the chapter contains code blocks, keep fences balanced and preserve the intended separation between prose, code, commands, and output.
+- Preserve an existing code fence language identifier when it is still correct. If it is missing or clearly wrong, choose the best-fit identifier (`bash` for shell commands, `text` for literal output/plain text, specific source language when clear).
 - Keep headings, examples, exercises, and explanations aligned with the original chapter.
 
 ## Hard constraints
@@ -30,9 +32,11 @@ Your job is to return a repaired Markdown version that preserves the teaching co
 - Do NOT summarize the whole chapter into something shorter just to avoid fixing the Markdown.
 - Do NOT output any explanation, notes, or metadata about the repair process.
 - Do NOT wrap the whole response in a code block.
+- Do NOT nest fenced code blocks.
+- Do NOT convert ordinary prose into code blocks unless the original content was clearly meant to be code, commands, config, or literal output.
 - Return plain Markdown only.
 </instructions>
 
 <output_format>
-Plain Markdown content only. No JSON. No commentary. No surrounding code fence.
+Plain Markdown content only. No JSON. No commentary. No surrounding code fence. Internal code fences are allowed only when they are part of the repaired chapter content.
 </output_format>

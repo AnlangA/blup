@@ -12,7 +12,12 @@ When the task requires JSON output:
 
 When the task requires Markdown output:
 - Use CommonMark syntax with KaTeX for math (`$inline$` and `$$display$$`).
-- When code blocks are needed, include the correct language identifier for the material (for example: ` ```rust `, ` ```sql `, ` ```bash `, ` ```text `). If the topic is not code-centric, prefer prose, tables, formulas, diagrams-in-words, or worked examples instead of inventing code.
+- Use inline code for short identifiers, operators, file names, and one-line snippets.
+- When code blocks are needed, use fenced code blocks only for multi-line code, commands, configs, or literal output that materially helps the explanation.
+- Every fenced code block must include the correct language identifier for the material (for example: ` ```rust `, ` ```sql `, ` ```bash `, ` ```text `).
+- Use `bash` for shell commands and `text` for plain-text output, transcripts, or pseudocode that is not valid source code.
+- Never nest fenced code blocks or wrap the entire response in a single fenced code block.
+- If the topic is not code-centric, prefer prose, tables, formulas, diagrams-in-words, or worked examples instead of inventing code.
 - Heading hierarchy: `##` for chapter title, `###` for sections, `####` for subsections.
 - Unordered lists: `- `. Ordered lists: `1. `.
 - Use `> ` blockquotes for tips, warnings, and key insights.

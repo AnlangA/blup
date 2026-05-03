@@ -82,7 +82,9 @@ Plain Markdown content. NOT JSON. NOT wrapped in a code block.
 
 Formatting rules:
 - `##` for chapter title, `###` for major sections, `####` for subsections
+- Use inline code for short syntax, identifiers, operators, filenames, and short outputs; reserve fenced code blocks for multi-line material.
 - If you include a code block, it MUST use the language identifier that matches the subject matter: ` ```rust `, ` ```sql `, ` ```bash `, ` ```text `, etc.
+- Use `bash` for shell commands, `text` for literal output or non-runnable transcripts, and the real source/config language for actual code.
 - Tables for comparisons: `| Col1 | Col2 |`
 - `> ` blockquotes for tips, warnings, key insights
 - `**bold**` for key terms on FIRST introduction only
@@ -103,6 +105,7 @@ Formatting rules:
 - Do NOT output JSON.
 - Do NOT write "Running this produces:..." — use "This would output:..." or "Expected output:".
 - Do NOT nest code blocks inside code blocks.
+- Do not label plain output or prose as source code; use `text` when the content is output, a transcript, or generic placeholder text.
 - Target 1500–3000 words depending on learner level (not counting code blocks).
 - Every code example must be syntactically correct for the stated language.
 - Do not include code unless the topic truly benefits from code. Never default to Python for unrelated subjects.

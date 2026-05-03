@@ -9,7 +9,8 @@
     "domain": "programming",
     "answer": "I have 3 years of C++ experience and learn best through hands-on projects. I can dedicate 10 hours per week.",
     "round": "3",
-    "is_final": "true"
+    "is_final": "true",
+    "profile_history": "[{\"role\":\"user\",\"content\":\"I have written C++ professionally for three years\",\"content_type\":\"profile_answer\"},{\"role\":\"assistant\",\"content\":\"What learning format works best for you?\",\"content_type\":\"profile_question\"}]"
   },
   "expected_output": {
     "experience_level": {

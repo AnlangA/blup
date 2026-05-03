@@ -3,26 +3,16 @@
   "description": "Teaching a comprehensive chapter with exercises",
   "prompt_name": "chapter_teaching",
   "prompt_version": 1,
-  "target_schema": "chapter.v1.schema.json",
   "input": {
     "chapter_id": "ownership-borrowing",
     "user_profile": "{\"experience_level\":{\"domain_knowledge\":\"intermediate\"},\"learning_style\":{\"preferred_format\":[\"text\",\"interactive\"]},\"available_time\":{\"hours_per_week\":10}}",
     "curriculum_context": "{\"title\":\"Rust for Systems Programmers\",\"chapters\":[{\"id\":\"ownership-borrowing\",\"title\":\"Ownership and Borrowing\"}]}"
   },
-  "expected_output": {
-    "id": "ownership-borrowing",
-    "title": "Ownership and Borrowing Deep Dive",
-    "order": 1,
-    "objectives": ["Master ownership rules", "Understand borrowing", "Work with lifetimes"],
-    "content": "## Ownership Rules\n\nRust's ownership system ensures memory safety without a garbage collector.\n\n### Rule 1: Each value has an owner\n\n```rust\nlet s = String::from(\"hello\");\n```\n\n### Rule 2: Only one owner at a time\n\n```rust\nlet s1 = String::from(\"hello\");\nlet s2 = s1; // s1 is moved\n```\n\n## Borrowing\n\nReferences allow access without ownership.\n\n## Exercise\n\nWrite a function that takes a borrowed string and returns its length.",
-    "estimated_minutes": 60,
-    "key_concepts": ["ownership", "borrowing", "lifetimes", "move semantics"],
-    "exercises": [
-      {
-        "question": "What happens when you move a value?",
-        "type": "short_answer",
-        "difficulty": "medium"
-      }
+  "render_checks": {
+    "must_contain": [
+      "ownership-borrowing",
+      "Rust for Systems Programmers",
+      "Never switch to Python by default."
     ]
   },
   "semantic_checks": [],
