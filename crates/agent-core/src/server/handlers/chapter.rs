@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use blup_agent::step::*;
 
-use super::helpers::{build_curriculum_context, default_profile_json, load_or_404, next_sse_id};
+use super::helpers::{build_curriculum_context, load_or_404, next_sse_id, resolve_profile_json, sse_serialize};
 use super::types::SseEvent;
 use crate::error::ApiError;
 use crate::state::domain as d;
@@ -116,17 +116,7 @@ pub async fn start_chapter(
             .unwrap_or(&ch_id)
             .to_string();
 
-        let profile = s
-            .profile
-            .clone()
-            .map(|p| {
-                serde_json::to_value(p).unwrap_or(json!({
-                    "experience_level": {"domain_knowledge": "beginner"},
-                    "learning_style": {"preferred_format": ["text"]},
-                    "available_time": {"hours_per_week": 5}
-                }))
-            })
-            .unwrap_or_else(default_profile_json);
+        let profile = resolve_profile_json(s.profile.as_ref());
         let curriculum_context = build_curriculum_context(s.curriculum.as_ref(), &ch_id);
         (title, profile, curriculum_context)
     };
@@ -186,17 +176,7 @@ pub async fn start_chapter_stream(
             .unwrap_or(&ch_id)
             .to_string();
 
-        let profile = s
-            .profile
-            .clone()
-            .map(|p| {
-                serde_json::to_value(p).unwrap_or(json!({
-                    "experience_level": {"domain_knowledge": "beginner"},
-                    "learning_style": {"preferred_format": ["text"]},
-                    "available_time": {"hours_per_week": 5}
-                }))
-            })
-            .unwrap_or_else(default_profile_json);
+        let profile = resolve_profile_json(s.profile.as_ref());
 
         let curriculum_context = build_curriculum_context(s.curriculum.as_ref(), &ch_id);
 
@@ -212,21 +192,21 @@ pub async fn start_chapter_stream(
         yield Ok(Event::default()
             .event("status")
             .id(next_sse_id())
-            .data(serde_json::to_string(&SseEvent::Status {
+            .data(sse_serialize(&SseEvent::Status {
                 state: "CHAPTER_LEARNING".to_string(),
                 message: format!("Loading chapter: {chapter_title}"),
-            }).expect("SSE serialize")));
+            })));
 
         if let Some(ref cached_content) = cached {
             yield Ok(Event::default()
                 .event("done")
                 .id(next_sse_id())
-                .data(serde_json::to_string(&SseEvent::Done {
+                .data(sse_serialize(&SseEvent::Done {
                     result: json!({
                         "chapter_id": stream_ch_id,
                         "content": cached_content,
                     }),
-                }).expect("SSE serialize")));
+                })));
             return;
         }
 
@@ -247,8 +227,7 @@ pub async fn start_chapter_stream(
                     yield Ok(Event::default()
                         .event("status")
                         .id(next_sse_id())
-                        .data(serde_json::to_string(&SseEvent::Status { state: st, message })
-                            .expect("SSE serialize")));
+                        .data(sse_serialize(&SseEvent::Status { state: st, message })));
                 }
                 Ok(AgentStreamEvent::Chunk { content, index }) => {
                     full_content.push_str(&content);
@@ -256,8 +235,7 @@ pub async fn start_chapter_stream(
                     yield Ok(Event::default()
                         .event("chunk")
                         .id(next_sse_id())
-                        .data(serde_json::to_string(&SseEvent::Chunk { content, index })
-                            .expect("SSE serialize")));
+                        .data(sse_serialize(&SseEvent::Chunk { content, index })));
 
                     if chunk_count.is_multiple_of(5) && !full_content.is_empty() {
                         let mut s = stream_handle.write().await;
@@ -270,8 +248,7 @@ pub async fn start_chapter_stream(
                     yield Ok(Event::default()
                         .event("error")
                         .id(next_sse_id())
-                        .data(serde_json::to_string(&SseEvent::Error { code, message })
-                            .expect("SSE serialize")));
+                        .data(sse_serialize(&SseEvent::Error { code, message })));
                     return;
                 }
                 Ok(AgentStreamEvent::Done { .. }) => {
@@ -290,10 +267,10 @@ pub async fn start_chapter_stream(
                             yield Ok(Event::default()
                                 .event("error")
                                 .id(next_sse_id())
-                                .data(serde_json::to_string(&SseEvent::Error {
+                                .data(sse_serialize(&SseEvent::Error {
                                     code,
                                     message: err.to_string(),
-                                }).expect("SSE serialize")));
+                                })));
                             return;
                         }
                     };
@@ -308,12 +285,12 @@ pub async fn start_chapter_stream(
                     yield Ok(Event::default()
                         .event("done")
                         .id(next_sse_id())
-                        .data(serde_json::to_string(&SseEvent::Done {
+                        .data(sse_serialize(&SseEvent::Done {
                             result: json!({
                                 "chapter_id": stream_ch_id,
                                 "content": final_content,
                             }),
-                        }).expect("SSE serialize")));
+                        })));
                     return;
                 }
                 Err(e) => {
@@ -321,10 +298,10 @@ pub async fn start_chapter_stream(
                     yield Ok(Event::default()
                         .event("error")
                         .id(next_sse_id())
-                        .data(serde_json::to_string(&SseEvent::Error {
+                        .data(sse_serialize(&SseEvent::Error {
                             code: "AGENT_ERROR".to_string(),
                             message: e.to_string(),
-                        }).expect("SSE serialize")));
+                        })));
                     return;
                 }
             }

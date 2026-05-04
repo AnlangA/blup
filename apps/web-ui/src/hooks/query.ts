@@ -12,6 +12,16 @@ import {
   tauriSandboxInteractiveStdin,
   type TauriInteractiveMessage,
 } from "../api/tauri-bridge";
+
+function decodeBase64Pdf(base64: string): Uint8Array {
+  const byteChars = atob(base64);
+  const byteNums = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) {
+    byteNums[i] = byteChars.charCodeAt(i);
+  }
+  return new Uint8Array(byteNums);
+}
+
 import type {
   LearningGoal,
   ProfileAnswer,
@@ -59,11 +69,18 @@ export function useDeletePlan() {
     },
     // If the backend cannot find the session (404), it's already gone —
     // clean up local state so the sidebar doesn't show a stale entry.
-    onError: (_err, planId) => {
-      queryClient.removeQueries({ queryKey: ["session", planId] });
-      queryClient.removeQueries({ queryKey: ["curriculum", planId] });
-      queryClient.removeQueries({ queryKey: ["sessions"] });
-      removePlan(planId);
+    onError: (err, planId) => {
+      const message =
+        err instanceof Error ? err.message : String(err);
+      const is404 =
+        typeof message === "string" &&
+        (message.includes("404") || message.toLowerCase().includes("not found"));
+      if (is404) {
+        queryClient.removeQueries({ queryKey: ["session", planId] });
+        queryClient.removeQueries({ queryKey: ["curriculum", planId] });
+        queryClient.removeQueries({ queryKey: ["sessions"] });
+        removePlan(planId);
+      }
     },
   });
 }
@@ -268,7 +285,7 @@ export function useCurriculum(sessionId: string | null) {
     queryKey: ["curriculum", sessionId],
     queryFn: () => api.getCurriculum(sessionId!),
     enabled: !!sessionId,
-    staleTime: Infinity,
+    staleTime: 30 * 60 * 1000,
   });
 }
 
@@ -279,7 +296,7 @@ export function useChapter(sessionId: string | null, chapterId: string | null) {
     queryKey: ["chapter", sessionId, chapterId],
     queryFn: () => api.startChapter(sessionId!, chapterId!),
     enabled: !!sessionId && !!chapterId,
-    staleTime: Infinity,
+    staleTime: 30 * 60 * 1000,
   });
 }
 
@@ -289,17 +306,18 @@ export function usePrefetchChapters(
 ) {
   const queryClient = useQueryClient();
 
-  return {
-    prefetchAll: () => {
-      for (const chId of chapterIds) {
-        queryClient.prefetchQuery({
-          queryKey: ["chapter", sessionId, chId],
-          queryFn: () => api.startChapter(sessionId!, chId),
-          staleTime: Infinity,
-        });
-      }
-    },
-  };
+  const prefetchAll = useCallback(() => {
+    if (!sessionId) return;
+    for (const chId of chapterIds) {
+      queryClient.prefetchQuery({
+        queryKey: ["chapter", sessionId, chId],
+        queryFn: () => api.startChapter(sessionId, chId),
+        staleTime: 30 * 60 * 1000,
+      });
+    }
+  }, [queryClient, sessionId, chapterIds]);
+
+  return { prefetchAll };
 }
 
 // ── Q&A ──
@@ -462,14 +480,9 @@ export function useExportChapterPdf(
         const r = result as ExportResult;
         dispatch({ type: "done", result: r });
         if (r.pdf_base64) {
-          const byteChars = atob(r.pdf_base64);
-          const byteNums = new Array(byteChars.length);
-          for (let i = 0; i < byteChars.length; i++) {
-            byteNums[i] = byteChars.charCodeAt(i);
-          }
-          const pdfBytes = new Uint8Array(byteNums);
+          const pdfBytes = decodeBase64Pdf(r.pdf_base64);
           void downloadBlob(
-            new Blob([pdfBytes], { type: "application/pdf" }),
+            new Blob([pdfBytes as BlobPart], { type: "application/pdf" }),
             r.filename || "chapter.pdf",
             "application/pdf",
           );
@@ -520,14 +533,9 @@ export function useExportCurriculumPdf(sessionId: string | null) {
         const r = result as ExportResult;
         dispatch({ type: "done", result: r });
         if (r.pdf_base64) {
-          const byteChars = atob(r.pdf_base64);
-          const byteNums = new Array(byteChars.length);
-          for (let i = 0; i < byteChars.length; i++) {
-            byteNums[i] = byteChars.charCodeAt(i);
-          }
-          const pdfBytes = new Uint8Array(byteNums);
+          const pdfBytes = decodeBase64Pdf(r.pdf_base64);
           void downloadBlob(
-            new Blob([pdfBytes], { type: "application/pdf" }),
+            new Blob([pdfBytes as BlobPart], { type: "application/pdf" }),
             r.filename || "curriculum.pdf",
             "application/pdf",
           );

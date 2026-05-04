@@ -152,7 +152,7 @@ pub async fn delete_session(pool: &SqlitePool, id: Uuid) -> Result<(), StorageEr
 
 pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<Session>, StorageError> {
     let sessions = sqlx::query_as::<_, Session>(
-        "SELECT id, state, previous_state, goal, feasibility_result, user_profile, created_at, updated_at FROM sessions ORDER BY updated_at DESC"
+        "SELECT id, state, previous_state, goal, feasibility_result, user_profile, created_at, updated_at FROM sessions ORDER BY updated_at DESC LIMIT 500"
     )
     .fetch_all(pool)
     .await?;

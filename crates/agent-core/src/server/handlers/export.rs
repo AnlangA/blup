@@ -8,7 +8,7 @@ use uuid::Uuid;
 use content_pipeline::error::ExportError as PipelineExportError;
 use content_pipeline::export::TypstCompiler;
 
-use super::helpers::{load_or_404, next_sse_id};
+use super::helpers::{load_or_404, next_sse_id, sse_serialize};
 use super::types::SseEvent;
 use crate::error::ApiError;
 use crate::AppState;
@@ -25,6 +25,73 @@ fn map_render_error(err: PipelineExportError, action: &str) -> ApiError {
         PipelineExportError::InvalidMarkdown(message) => ApiError::Validation(message),
         other => ApiError::Internal(format!("Failed to {action}: {other}")),
     }
+}
+
+fn build_chapter_json(
+    content: String,
+    chapter_meta: Option<&crate::state::domain::ChapterData>,
+    fallback_title: &str,
+) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    map.insert("content".to_string(), serde_json::Value::String(content));
+
+    if let Some(ch) = chapter_meta {
+        map.insert(
+            "title".to_string(),
+            serde_json::Value::String(ch.title.clone()),
+        );
+        if let Some(minutes) = ch.estimated_minutes {
+            map.insert(
+                "estimated_minutes".to_string(),
+                serde_json::Value::Number(minutes.into()),
+            );
+        }
+        if !ch.objectives.is_empty() {
+            map.insert(
+                "objectives".to_string(),
+                serde_json::Value::Array(
+                    ch.objectives
+                        .iter()
+                        .map(|o| serde_json::Value::String(o.clone()))
+                        .collect(),
+                ),
+            );
+        }
+        if !ch.prerequisites.is_empty() {
+            map.insert(
+                "prerequisites".to_string(),
+                serde_json::Value::Array(
+                    ch.prerequisites
+                        .iter()
+                        .map(|p| serde_json::Value::String(p.clone()))
+                        .collect(),
+                ),
+            );
+        }
+        if !ch.key_concepts.is_empty() {
+            map.insert(
+                "key_concepts".to_string(),
+                serde_json::Value::Array(
+                    ch.key_concepts
+                        .iter()
+                        .map(|k| serde_json::Value::String(k.clone()))
+                        .collect(),
+                ),
+            );
+        }
+        if !ch.exercises.is_empty() {
+            if let Ok(v) = serde_json::to_value(&ch.exercises) {
+                map.insert("exercises".to_string(), v);
+            }
+        }
+    } else {
+        map.insert(
+            "title".to_string(),
+            serde_json::Value::String(fallback_title.to_string()),
+        );
+    }
+
+    serde_json::Value::Object(map)
 }
 
 // ── export_chapter_typst (sync JSON) ──
@@ -46,67 +113,7 @@ pub async fn export_chapter_typst(
             .curriculum
             .as_ref()
             .and_then(|c| c.chapters.iter().find(|ch| ch.id == ch_id));
-
-        let mut json = serde_json::Map::new();
-        json.insert("content".to_string(), serde_json::Value::String(content));
-
-        if let Some(ch) = chapter_meta {
-            json.insert(
-                "title".to_string(),
-                serde_json::Value::String(ch.title.clone()),
-            );
-            if let Some(minutes) = ch.estimated_minutes {
-                json.insert(
-                    "estimated_minutes".to_string(),
-                    serde_json::Value::Number(minutes.into()),
-                );
-            }
-            if !ch.objectives.is_empty() {
-                json.insert(
-                    "objectives".to_string(),
-                    serde_json::Value::Array(
-                        ch.objectives
-                            .iter()
-                            .map(|o| serde_json::Value::String(o.clone()))
-                            .collect(),
-                    ),
-                );
-            }
-            if !ch.prerequisites.is_empty() {
-                json.insert(
-                    "prerequisites".to_string(),
-                    serde_json::Value::Array(
-                        ch.prerequisites
-                            .iter()
-                            .map(|p| serde_json::Value::String(p.clone()))
-                            .collect(),
-                    ),
-                );
-            }
-            if !ch.key_concepts.is_empty() {
-                json.insert(
-                    "key_concepts".to_string(),
-                    serde_json::Value::Array(
-                        ch.key_concepts
-                            .iter()
-                            .map(|k| serde_json::Value::String(k.clone()))
-                            .collect(),
-                    ),
-                );
-            }
-            if !ch.exercises.is_empty() {
-                if let Ok(v) = serde_json::to_value(&ch.exercises) {
-                    json.insert("exercises".to_string(), v);
-                }
-            }
-        } else {
-            json.insert(
-                "title".to_string(),
-                serde_json::Value::String(ch_id.clone()),
-            );
-        }
-
-        serde_json::Value::Object(json)
+        build_chapter_json(content, chapter_meta, &ch_id)
     };
 
     let chapter_title = chapter_json
@@ -186,71 +193,11 @@ pub async fn export_chapter_pdf_stream(
             .curriculum
             .as_ref()
             .and_then(|c| c.chapters.iter().find(|ch| ch.id == ch_id));
-
-        let mut json = serde_json::Map::new();
-        let title;
-
-        json.insert("content".to_string(), serde_json::Value::String(content));
-
-        if let Some(ch) = chapter_meta {
-            title = ch.title.clone();
-            json.insert(
-                "title".to_string(),
-                serde_json::Value::String(ch.title.clone()),
-            );
-            if let Some(minutes) = ch.estimated_minutes {
-                json.insert(
-                    "estimated_minutes".to_string(),
-                    serde_json::Value::Number(minutes.into()),
-                );
-            }
-            if !ch.objectives.is_empty() {
-                json.insert(
-                    "objectives".to_string(),
-                    serde_json::Value::Array(
-                        ch.objectives
-                            .iter()
-                            .map(|o| serde_json::Value::String(o.clone()))
-                            .collect(),
-                    ),
-                );
-            }
-            if !ch.prerequisites.is_empty() {
-                json.insert(
-                    "prerequisites".to_string(),
-                    serde_json::Value::Array(
-                        ch.prerequisites
-                            .iter()
-                            .map(|p| serde_json::Value::String(p.clone()))
-                            .collect(),
-                    ),
-                );
-            }
-            if !ch.key_concepts.is_empty() {
-                json.insert(
-                    "key_concepts".to_string(),
-                    serde_json::Value::Array(
-                        ch.key_concepts
-                            .iter()
-                            .map(|k| serde_json::Value::String(k.clone()))
-                            .collect(),
-                    ),
-                );
-            }
-            if !ch.exercises.is_empty() {
-                if let Ok(v) = serde_json::to_value(&ch.exercises) {
-                    json.insert("exercises".to_string(), v);
-                }
-            }
-        } else {
-            title = ch_id.clone();
-            json.insert(
-                "title".to_string(),
-                serde_json::Value::String(ch_id.clone()),
-            );
-        }
-
-        (serde_json::Value::Object(json), title)
+        let title = chapter_meta
+            .map(|ch| ch.title.clone())
+            .unwrap_or_else(|| ch_id.clone());
+        let json = build_chapter_json(content, chapter_meta, &ch_id);
+        (json, title)
     };
 
     let pipeline = state.content_pipeline.clone();
@@ -262,10 +209,10 @@ pub async fn export_chapter_pdf_stream(
         yield Ok(Event::default()
             .event("status")
             .id(next_sse_id())
-            .data(serde_json::to_string(&SseEvent::Status {
+            .data(sse_serialize(&SseEvent::Status {
                 state: "rendering".to_string(),
                 message: "Rendering chapter to Typst...".to_string(),
-            }).expect("SSE serialize")));
+            })));
 
         let typst_source = match pipeline.render_chapter_to_typst(&chapter_json) {
             Ok(src) => src,
@@ -274,10 +221,10 @@ pub async fn export_chapter_pdf_stream(
                 yield Ok(Event::default()
                     .event("error")
                     .id(next_sse_id())
-                    .data(serde_json::to_string(&SseEvent::Error {
+                    .data(sse_serialize(&SseEvent::Error {
                         code,
                         message: format!("Failed to render: {e}"),
-                    }).expect("SSE serialize")));
+                    })));
                 return;
             }
         };
@@ -285,10 +232,10 @@ pub async fn export_chapter_pdf_stream(
         yield Ok(Event::default()
             .event("status")
             .id(next_sse_id())
-            .data(serde_json::to_string(&SseEvent::Status {
+            .data(sse_serialize(&SseEvent::Status {
                 state: "compiling".to_string(),
                 message: "Compiling Typst to PDF...".to_string(),
-            }).expect("SSE serialize")));
+            })));
 
         let compiler = TypstCompiler::new(sandbox.clone());
         match compiler.compile_to_pdf(&typst_source, &std::collections::HashMap::new()).await {
@@ -302,7 +249,7 @@ pub async fn export_chapter_pdf_stream(
                 yield Ok(Event::default()
                     .event("done")
                     .id(next_sse_id())
-                    .data(serde_json::to_string(&SseEvent::Done {
+                    .data(sse_serialize(&SseEvent::Done {
                         result: json!({
                             "filename": filename,
                             "pdf_base64": pdf_base64,
@@ -310,16 +257,16 @@ pub async fn export_chapter_pdf_stream(
                             "size_bytes": artifact.size_bytes,
                             "page_count": artifact.page_count,
                         }),
-                    }).expect("SSE serialize")));
+                    })));
             }
             Err(e) => {
                 yield Ok(Event::default()
                     .event("error")
                     .id(next_sse_id())
-                    .data(serde_json::to_string(&SseEvent::Error {
+                    .data(sse_serialize(&SseEvent::Error {
                         code: "COMPILE_ERROR".to_string(),
                         message: e.to_string(),
-                    }).expect("SSE serialize")));
+                    })));
             }
         }
     };
@@ -359,10 +306,10 @@ pub async fn export_curriculum_pdf_stream(
         yield Ok(Event::default()
             .event("status")
             .id(next_sse_id())
-            .data(serde_json::to_string(&SseEvent::Status {
+            .data(sse_serialize(&SseEvent::Status {
                 state: "rendering".to_string(),
                 message: "Rendering curriculum to Typst...".to_string(),
-            }).expect("SSE serialize")));
+            })));
 
         let typst_source = match pipeline.render_curriculum_to_typst(&curriculum_json) {
             Ok(src) => src,
@@ -371,10 +318,10 @@ pub async fn export_curriculum_pdf_stream(
                 yield Ok(Event::default()
                     .event("error")
                     .id(next_sse_id())
-                    .data(serde_json::to_string(&SseEvent::Error {
+                    .data(sse_serialize(&SseEvent::Error {
                         code,
                         message: format!("Failed to render: {e}"),
-                    }).expect("SSE serialize")));
+                    })));
                 return;
             }
         };
@@ -382,10 +329,10 @@ pub async fn export_curriculum_pdf_stream(
         yield Ok(Event::default()
             .event("status")
             .id(next_sse_id())
-            .data(serde_json::to_string(&SseEvent::Status {
+            .data(sse_serialize(&SseEvent::Status {
                 state: "compiling".to_string(),
                 message: "Compiling Typst to PDF...".to_string(),
-            }).expect("SSE serialize")));
+            })));
 
         let compiler = TypstCompiler::new(sandbox.clone());
         match compiler.compile_to_pdf(&typst_source, &std::collections::HashMap::new()).await {
@@ -399,7 +346,7 @@ pub async fn export_curriculum_pdf_stream(
                 yield Ok(Event::default()
                     .event("done")
                     .id(next_sse_id())
-                    .data(serde_json::to_string(&SseEvent::Done {
+                    .data(sse_serialize(&SseEvent::Done {
                         result: json!({
                             "filename": filename,
                             "pdf_base64": pdf_base64,
@@ -407,16 +354,16 @@ pub async fn export_curriculum_pdf_stream(
                             "size_bytes": artifact.size_bytes,
                             "page_count": artifact.page_count,
                         }),
-                    }).expect("SSE serialize")));
+                    })));
             }
             Err(e) => {
                 yield Ok(Event::default()
                     .event("error")
                     .id(next_sse_id())
-                    .data(serde_json::to_string(&SseEvent::Error {
+                    .data(sse_serialize(&SseEvent::Error {
                         code: "COMPILE_ERROR".to_string(),
                         message: e.to_string(),
-                    }).expect("SSE serialize")));
+                    })));
             }
         }
     };

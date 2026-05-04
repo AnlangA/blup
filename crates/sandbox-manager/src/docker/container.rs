@@ -2,6 +2,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use tokio::time::timeout;
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::config::SandboxConfig;
@@ -25,6 +26,15 @@ impl ContainerExecutor {
         let image = request.tool_kind.to_image();
         let total_timeout = Duration::from_secs(
             request.limits.compile_timeout_secs + request.limits.run_timeout_secs,
+        );
+
+        info!(
+            request_id = %request.request_id,
+            session_id = %request.session_id,
+            language = ?request.tool_kind,
+            container = %container_name,
+            timeout_secs = total_timeout.as_secs(),
+            "Starting sandbox execution"
         );
 
         // Typst needs more PIDs for rayon parallelism
@@ -137,14 +147,30 @@ impl ContainerExecutor {
         match result {
             Ok(Ok(output)) => {
                 let duration_ms = start.elapsed().as_millis() as u64;
+                debug!(
+                    request_id = %request.request_id,
+                    duration_ms,
+                    exit_code = ?output.status.code(),
+                    "Sandbox process completed"
+                );
 
                 // Inspect container to capture resource usage before removing
-                let resource_usage = self.inspect_container(&container_name);
+                let container_name_clone = container_name.clone();
+                let resource_usage = tokio::task::spawn_blocking(move || {
+                    inspect_container(&container_name_clone)
+                })
+                .await
+                .unwrap_or(ResourceUsage::default());
 
                 // Clean up container
-                self.force_remove_container(&container_name);
+                let container_name_clone = container_name.clone();
+                tokio::task::spawn_blocking(move || {
+                    force_remove_container(&container_name_clone);
+                })
+                .await
+                .unwrap_or(());
 
-                self.parse_output(
+                parse_output(
                     request.request_id,
                     output,
                     &request,
@@ -153,21 +179,53 @@ impl ContainerExecutor {
                 )
             }
             Ok(Err(e)) => {
-                self.force_remove_container(&container_name);
+                warn!(
+                    request_id = %request.request_id,
+                    error = %e,
+                    "Sandbox execution failed"
+                );
+                let container_name_clone = container_name.clone();
+                tokio::task::spawn_blocking(move || {
+                    force_remove_container(&container_name_clone);
+                })
+                .await
+                .unwrap_or(());
                 Err(e)
             }
             Err(_elapsed) => {
+                warn!(
+                    request_id = %request.request_id,
+                    timeout_secs = total_timeout.as_secs(),
+                    "Sandbox execution timed out"
+                );
                 // Timeout - force kill, then inspect before removing
-                let _ = Command::new("docker")
-                    .args(["kill", "--signal=SIGKILL", &container_name])
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status();
+                let container_name_clone = container_name.clone();
+                tokio::task::spawn_blocking(move || {
+                    let _ = Command::new("docker")
+                        .args(["kill", "--signal=SIGKILL", &container_name_clone])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status();
+                })
+                .await
+                .unwrap_or(());
 
-                std::thread::sleep(Duration::from_millis(500));
+                tokio::time::sleep(Duration::from_millis(500)).await;
 
-                let resource_usage = self.inspect_container(&container_name);
-                self.force_remove_container(&container_name);
+                let resource_usage = {
+                    let container_name_clone = container_name.clone();
+                    tokio::task::spawn_blocking(move || {
+                        inspect_container(&container_name_clone)
+                    })
+                    .await
+                    .unwrap_or(ResourceUsage::default())
+                };
+                let container_name_clone = container_name.clone();
+                tokio::task::spawn_blocking(move || {
+                    force_remove_container(&container_name_clone);
+                })
+                .await
+                .unwrap_or(());
 
                 Ok(SandboxResult {
                     request_id: request.request_id,
@@ -188,9 +246,10 @@ impl ContainerExecutor {
             }
         }
     }
+}
 
-    /// Inspect a container with `docker inspect` to extract resource usage metrics.
-    fn inspect_container(&self, name: &str) -> ResourceUsage {
+/// Inspect a container with `docker inspect` to extract resource usage metrics.
+fn inspect_container(name: &str) -> ResourceUsage {
         // Safely read OOMKilled from docker inspect
         let _oom_killed = Command::new("docker")
             .args(["inspect", "--format", "{{json .State}}", name])
@@ -259,9 +318,8 @@ impl ContainerExecutor {
         }
     }
 
-    fn parse_output(
-        &self,
-        request_id: Uuid,
+fn parse_output(
+    request_id: Uuid,
         output: std::process::Output,
         request: &SandboxRequest,
         duration_ms: u64,
@@ -314,11 +372,10 @@ impl ContainerExecutor {
         })
     }
 
-    fn force_remove_container(&self, name: &str) {
-        let _ = Command::new("docker")
-            .args(["rm", "-f", name])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
-    }
+fn force_remove_container(name: &str) {
+    let _ = Command::new("docker")
+        .args(["rm", "-f", name])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
 }

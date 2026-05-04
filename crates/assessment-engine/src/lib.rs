@@ -11,16 +11,9 @@ use executor::CodeExecutor;
 use models::evaluation::Evaluation;
 use models::exercise::Exercise;
 
+#[derive(Clone)]
 pub struct AssessmentEngine {
     code_executor: Option<Arc<dyn CodeExecutor>>,
-}
-
-impl Clone for AssessmentEngine {
-    fn clone(&self) -> Self {
-        Self {
-            code_executor: self.code_executor.clone(),
-        }
-    }
 }
 
 impl AssessmentEngine {

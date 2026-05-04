@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use blup_agent::step::*;
 
-use super::helpers::{build_curriculum_context, default_profile_json, load_or_404};
+use super::helpers::{build_curriculum_context, load_or_404, resolve_profile_json};
 use super::types::QuestionRequest;
 use crate::error::ApiError;
 use crate::state::domain::SessionMessage;
@@ -30,17 +30,7 @@ pub async fn ask_question(
                 "Cannot ask question in state {current}"
             )));
         }
-        let profile = s
-            .profile
-            .clone()
-            .map(|p| {
-                serde_json::to_value(p).unwrap_or(json!({
-                    "experience_level": {"domain_knowledge": "beginner"},
-                    "learning_style": {"preferred_format": ["text"]},
-                    "available_time": {"hours_per_week": 5}
-                }))
-            })
-            .unwrap_or_else(default_profile_json);
+        let profile = resolve_profile_json(s.profile.as_ref());
 
         let ch_content = s.chapter_contents.get(&ch_id).cloned().unwrap_or_default();
 

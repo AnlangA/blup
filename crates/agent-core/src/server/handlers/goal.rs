@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use blup_agent::step::*;
 
-use super::helpers::{from_agent_value, load_or_404, next_sse_id};
+use super::helpers::{from_agent_value, load_or_404, next_sse_id, sse_serialize};
 use super::types::SseEvent;
 use crate::error::ApiError;
 use crate::state::domain as d;
@@ -117,22 +117,19 @@ pub async fn submit_goal_stream(
                     yield Ok(Event::default()
                         .event("status")
                         .id(next_sse_id())
-                        .data(serde_json::to_string(&SseEvent::Status { state: st, message })
-                            .expect("SSE serialize")));
+                        .data(sse_serialize(&SseEvent::Status { state: st, message })));
                 }
                 Ok(AgentStreamEvent::Chunk { content, index }) => {
                     yield Ok(Event::default()
                         .event("chunk")
                         .id(next_sse_id())
-                        .data(serde_json::to_string(&SseEvent::Chunk { content, index })
-                            .expect("SSE serialize")));
+                        .data(sse_serialize(&SseEvent::Chunk { content, index })));
                 }
                 Ok(AgentStreamEvent::Error { code, message }) => {
                     yield Ok(Event::default()
                         .event("error")
                         .id(next_sse_id())
-                        .data(serde_json::to_string(&SseEvent::Error { code, message })
-                            .expect("SSE serialize")));
+                        .data(sse_serialize(&SseEvent::Error { code, message })));
                     return;
                 }
                 Ok(AgentStreamEvent::Done { result }) => {
@@ -171,18 +168,17 @@ pub async fn submit_goal_stream(
                     yield Ok(Event::default()
                         .event("done")
                         .id(next_sse_id())
-                        .data(serde_json::to_string(&SseEvent::Done { result })
-                            .expect("SSE serialize")));
+                        .data(sse_serialize(&SseEvent::Done { result })));
                     return;
                 }
                 Err(e) => {
                     yield Ok(Event::default()
                         .event("error")
                         .id(next_sse_id())
-                        .data(serde_json::to_string(&SseEvent::Error {
+                        .data(sse_serialize(&SseEvent::Error {
                             code: "AGENT_ERROR".to_string(),
                             message: e.to_string(),
-                        }).expect("SSE serialize")));
+                        })));
                     return;
                 }
             }

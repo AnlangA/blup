@@ -14,6 +14,7 @@ use sandbox_manager::InteractiveOutput;
 use sandbox_manager::ToolKind;
 
 use super::helpers::next_sse_id;
+use super::helpers::sse_serialize;
 use super::types::{
     InteractiveClientMessage, InteractiveServerMessage, InteractiveStartRequest,
     InteractiveStartResponse, SandboxExecuteRequest, SseEvent,
@@ -59,10 +60,10 @@ pub async fn sandbox_execute_stream(
         yield Ok(Event::default()
             .event("status")
             .id(next_sse_id())
-            .data(serde_json::to_string(&SseEvent::Status {
+            .data(sse_serialize(&SseEvent::Status {
                 state: "running".to_string(),
                 message: format!("Executing {} code...", req.language),
-            }).expect("SSE serialize")));
+            })));
 
         match sandbox.execute(sandbox_request).await {
             Ok(result) => {
@@ -71,9 +72,9 @@ pub async fn sandbox_execute_stream(
                     yield Ok(Event::default()
                         .event("stdout")
                         .id(next_sse_id())
-                        .data(serde_json::to_string(&SseEvent::Stdout {
+                        .data(sse_serialize(&SseEvent::Stdout {
                             content: format!("{}\n", line),
-                        }).expect("SSE serialize")));
+                        })));
                 }
 
                 // Stream stderr in chunks if present
@@ -82,31 +83,31 @@ pub async fn sandbox_execute_stream(
                         yield Ok(Event::default()
                             .event("stderr")
                             .id(next_sse_id())
-                            .data(serde_json::to_string(&SseEvent::Stderr {
+                            .data(sse_serialize(&SseEvent::Stderr {
                                 content: format!("{}\n", line),
-                            }).expect("SSE serialize")));
+                            })));
                     }
                 }
 
                 yield Ok(Event::default()
                     .event("done")
                     .id(next_sse_id())
-                    .data(serde_json::to_string(&SseEvent::Done {
+                    .data(sse_serialize(&SseEvent::Done {
                         result: json!({
                             "exit_code": result.exit_code,
                             "duration_ms": result.duration_ms,
                             "status": result.status.to_string(),
                         }),
-                    }).expect("SSE serialize")));
+                    })));
             }
             Err(e) => {
                 yield Ok(Event::default()
                     .event("error")
                     .id(next_sse_id())
-                    .data(serde_json::to_string(&SseEvent::Error {
+                    .data(sse_serialize(&SseEvent::Error {
                         code: "SANDBOX_ERROR".to_string(),
                         message: e.to_string(),
-                    }).expect("SSE serialize")));
+                    })));
             }
         }
     };

@@ -1,5 +1,5 @@
-import { useReducer, useState, useEffect, useCallback } from 'react';
-import { sseClient } from '../api/sse';
+import { useReducer, useState, useEffect, useCallback, useRef } from 'react';
+import { SSEClient } from '../api/sse';
 
 interface StreamState {
   content: string | null;
@@ -43,13 +43,16 @@ export function useStreamChapter(
     error: null,
   });
 
+  const sseRef = useRef(new SSEClient());
+
   useEffect(() => {
     if (!sessionId || !chapterId) return;
 
     dispatch({ type: 'reset' });
     const url = `/api/session/${sessionId}/chapter/${chapterId}/stream`;
 
-    sseClient.connectGet(url, {
+    const client = sseRef.current!;
+    client.connectGet(url, {
       onChunk: (text) => dispatch({ type: 'chunk', text }),
       onDone: (result) => {
         const content =
@@ -59,17 +62,17 @@ export function useStreamChapter(
           typeof (result as { content?: unknown }).content === 'string'
             ? (result as { content: string }).content
             : null;
-        sseClient.close();
+        client.close();
         dispatch({ type: 'done', content });
       },
       onError: (_code, message) => {
-        sseClient.close();
+        client.close();
         dispatch({ type: 'error', message });
       },
     });
 
     return () => {
-      sseClient.close();
+      client.close();
     };
   }, [sessionId, chapterId]);
 
@@ -83,15 +86,61 @@ export function useStreamChapterOnDemand(
   sessionId: string | null,
 ): StreamState & { streamChapter: (chapterId: string) => void } {
   const [chapterId, setChapterId] = useState<string | null>(null);
-  const streamState = useStreamChapter(sessionId, chapterId);
+  const sseRef = useRef(new SSEClient());
+  const streamState = useStreamChapterWithRef(sessionId, chapterId, sseRef);
 
   const streamChapter = useCallback(
     (chId: string) => {
-      sseClient.close();
+      sseRef.current!.close();
       setChapterId(chId);
     },
     [],
   );
 
   return { ...streamState, streamChapter };
+}
+
+function useStreamChapterWithRef(
+  sessionId: string | null,
+  chapterId: string | null,
+  sseRef: React.RefObject<SSEClient>,
+): StreamState {
+  const [state, dispatch] = useReducer(streamReducer, {
+    content: null,
+    isStreaming: false,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (!sessionId || !chapterId) return;
+
+    dispatch({ type: 'reset' });
+    const url = `/api/session/${sessionId}/chapter/${chapterId}/stream`;
+
+    const client = sseRef.current!;
+    client.connectGet(url, {
+      onChunk: (text) => dispatch({ type: 'chunk', text }),
+      onDone: (result) => {
+        const content =
+          result &&
+          typeof result === 'object' &&
+          'content' in result &&
+          typeof (result as { content?: unknown }).content === 'string'
+            ? (result as { content: string }).content
+            : null;
+        client.close();
+        dispatch({ type: 'done', content });
+      },
+      onError: (_code, message) => {
+        client.close();
+        dispatch({ type: 'error', message });
+      },
+    });
+
+    return () => {
+      client.close();
+    };
+  }, [sessionId, chapterId, sseRef]);
+
+  return state;
 }
