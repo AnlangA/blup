@@ -49,9 +49,9 @@ impl ContainerExecutor {
             .args(["--read-only"])
             .args([
                 "--tmpfs",
-                "/workspace:rw,nosuid,size=100m,uid=1000,gid=1000",
+                "/workspace:rw,nosuid,exec,size=100m,uid=1000,gid=1000",
             ])
-            .args(["--tmpfs", "/tmp:rw,nosuid,size=10m,uid=1000,gid=1000"])
+            .args(["--tmpfs", "/tmp:rw,nosuid,exec,size=10m,uid=1000,gid=1000"])
             .args(["--cap-drop", "ALL"])
             .args(["--user", "1000:1000"]);
 
@@ -75,13 +75,16 @@ impl ContainerExecutor {
                 cmd.arg(&code);
             }
             ExecutionModel::Compiled => {
-                // docker run --entrypoint <runner_script> <image>
-                // code piped via stdin
+                // docker run -i --entrypoint <runner_script> <image>
+                // code piped via stdin — -i keeps stdin open so the runner can read it
+                cmd.arg("-i");
                 if let Some(runner) = request.tool_kind.runner_script() {
                     cmd.args(["--entrypoint", runner]);
                 }
                 cmd.arg(image);
-                cmd.stdin(Stdio::piped());
+                cmd.stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
             }
         }
 
@@ -89,14 +92,12 @@ impl ContainerExecutor {
         let start = std::time::Instant::now();
         let result = timeout(total_timeout, async {
             let output = match execution_model {
-                ExecutionModel::Interpreted => {
-                    tokio::task::spawn_blocking(move || cmd.output())
-                        .await
-                        .map_err(|e| SandboxError::container(&format!("Failed to spawn task: {}", e)))?
-                        .map_err(|e| {
-                            SandboxError::container(&format!("Failed to execute docker: {}", e))
-                        })?
-                }
+                ExecutionModel::Interpreted => tokio::task::spawn_blocking(move || cmd.output())
+                    .await
+                    .map_err(|e| SandboxError::container(&format!("Failed to spawn task: {}", e)))?
+                    .map_err(|e| {
+                        SandboxError::container(&format!("Failed to execute docker: {}", e))
+                    })?,
                 ExecutionModel::Compiled => {
                     // Spawn the process, pipe code to stdin, then wait
                     let mut child = tokio::task::spawn_blocking(move || {

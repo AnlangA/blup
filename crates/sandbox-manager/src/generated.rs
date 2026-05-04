@@ -83,8 +83,16 @@ impl ToolKind {
 
     pub fn execution_model(&self) -> ExecutionModel {
         match self {
-            Self::PythonExec | Self::NodeExec | Self::RubyExec | Self::BashExec => ExecutionModel::Interpreted,
-            Self::TypescriptCompileRun | Self::RustCompileRun | Self::GoCompileRun | Self::CCompileRun | Self::CppCompileRun | Self::JavaCompileRun | Self::TypstCompile => ExecutionModel::Compiled,
+            Self::PythonExec | Self::NodeExec | Self::RubyExec | Self::BashExec => {
+                ExecutionModel::Interpreted
+            }
+            Self::TypescriptCompileRun
+            | Self::RustCompileRun
+            | Self::GoCompileRun
+            | Self::CCompileRun
+            | Self::CppCompileRun
+            | Self::JavaCompileRun
+            | Self::TypstCompile => ExecutionModel::Compiled,
         }
     }
 
@@ -138,17 +146,61 @@ impl ToolKind {
 
     pub fn default_limits(&self) -> LanguageLimits {
         match self {
-            Self::PythonExec => LanguageLimits { compile_timeout_secs: 0, run_timeout_secs: 10, memory_mb: 512 },
-            Self::NodeExec => LanguageLimits { compile_timeout_secs: 0, run_timeout_secs: 10, memory_mb: 512 },
-            Self::TypescriptCompileRun => LanguageLimits { compile_timeout_secs: 30, run_timeout_secs: 10, memory_mb: 512 },
-            Self::RustCompileRun => LanguageLimits { compile_timeout_secs: 60, run_timeout_secs: 10, memory_mb: 1024 },
-            Self::GoCompileRun => LanguageLimits { compile_timeout_secs: 30, run_timeout_secs: 10, memory_mb: 512 },
-            Self::CCompileRun => LanguageLimits { compile_timeout_secs: 20, run_timeout_secs: 10, memory_mb: 256 },
-            Self::CppCompileRun => LanguageLimits { compile_timeout_secs: 30, run_timeout_secs: 10, memory_mb: 512 },
-            Self::JavaCompileRun => LanguageLimits { compile_timeout_secs: 30, run_timeout_secs: 10, memory_mb: 512 },
-            Self::RubyExec => LanguageLimits { compile_timeout_secs: 0, run_timeout_secs: 10, memory_mb: 512 },
-            Self::BashExec => LanguageLimits { compile_timeout_secs: 0, run_timeout_secs: 10, memory_mb: 128 },
-            Self::TypstCompile => LanguageLimits { compile_timeout_secs: 60, run_timeout_secs: 10, memory_mb: 1024 },
+            Self::PythonExec => LanguageLimits {
+                compile_timeout_secs: 0,
+                run_timeout_secs: 10,
+                memory_mb: 512,
+            },
+            Self::NodeExec => LanguageLimits {
+                compile_timeout_secs: 0,
+                run_timeout_secs: 10,
+                memory_mb: 512,
+            },
+            Self::TypescriptCompileRun => LanguageLimits {
+                compile_timeout_secs: 30,
+                run_timeout_secs: 10,
+                memory_mb: 512,
+            },
+            Self::RustCompileRun => LanguageLimits {
+                compile_timeout_secs: 60,
+                run_timeout_secs: 10,
+                memory_mb: 1024,
+            },
+            Self::GoCompileRun => LanguageLimits {
+                compile_timeout_secs: 30,
+                run_timeout_secs: 10,
+                memory_mb: 512,
+            },
+            Self::CCompileRun => LanguageLimits {
+                compile_timeout_secs: 20,
+                run_timeout_secs: 10,
+                memory_mb: 256,
+            },
+            Self::CppCompileRun => LanguageLimits {
+                compile_timeout_secs: 30,
+                run_timeout_secs: 10,
+                memory_mb: 512,
+            },
+            Self::JavaCompileRun => LanguageLimits {
+                compile_timeout_secs: 30,
+                run_timeout_secs: 10,
+                memory_mb: 512,
+            },
+            Self::RubyExec => LanguageLimits {
+                compile_timeout_secs: 0,
+                run_timeout_secs: 10,
+                memory_mb: 512,
+            },
+            Self::BashExec => LanguageLimits {
+                compile_timeout_secs: 0,
+                run_timeout_secs: 10,
+                memory_mb: 128,
+            },
+            Self::TypstCompile => LanguageLimits {
+                compile_timeout_secs: 60,
+                run_timeout_secs: 10,
+                memory_mb: 1024,
+            },
         }
     }
 }
@@ -180,16 +232,71 @@ pub struct LanguageInfo {
 
 pub fn all_languages_info() -> Vec<LanguageInfo> {
     vec![
-        LanguageInfo { language: "python", display: "Python", tool_kind: ToolKind::PythonExec, execution_model: ExecutionModel::Interpreted },
-        LanguageInfo { language: "javascript", display: "JS", tool_kind: ToolKind::NodeExec, execution_model: ExecutionModel::Interpreted },
-        LanguageInfo { language: "typescript", display: "TS", tool_kind: ToolKind::TypescriptCompileRun, execution_model: ExecutionModel::Compiled },
-        LanguageInfo { language: "rust", display: "Rust", tool_kind: ToolKind::RustCompileRun, execution_model: ExecutionModel::Compiled },
-        LanguageInfo { language: "go", display: "Go", tool_kind: ToolKind::GoCompileRun, execution_model: ExecutionModel::Compiled },
-        LanguageInfo { language: "c", display: "C", tool_kind: ToolKind::CCompileRun, execution_model: ExecutionModel::Compiled },
-        LanguageInfo { language: "cpp", display: "C++", tool_kind: ToolKind::CppCompileRun, execution_model: ExecutionModel::Compiled },
-        LanguageInfo { language: "java", display: "Java", tool_kind: ToolKind::JavaCompileRun, execution_model: ExecutionModel::Compiled },
-        LanguageInfo { language: "ruby", display: "Ruby", tool_kind: ToolKind::RubyExec, execution_model: ExecutionModel::Interpreted },
-        LanguageInfo { language: "bash", display: "Bash", tool_kind: ToolKind::BashExec, execution_model: ExecutionModel::Interpreted },
-        LanguageInfo { language: "typst", display: "Typst", tool_kind: ToolKind::TypstCompile, execution_model: ExecutionModel::Compiled },
+        LanguageInfo {
+            language: "python",
+            display: "Python",
+            tool_kind: ToolKind::PythonExec,
+            execution_model: ExecutionModel::Interpreted,
+        },
+        LanguageInfo {
+            language: "javascript",
+            display: "JS",
+            tool_kind: ToolKind::NodeExec,
+            execution_model: ExecutionModel::Interpreted,
+        },
+        LanguageInfo {
+            language: "typescript",
+            display: "TS",
+            tool_kind: ToolKind::TypescriptCompileRun,
+            execution_model: ExecutionModel::Compiled,
+        },
+        LanguageInfo {
+            language: "rust",
+            display: "Rust",
+            tool_kind: ToolKind::RustCompileRun,
+            execution_model: ExecutionModel::Compiled,
+        },
+        LanguageInfo {
+            language: "go",
+            display: "Go",
+            tool_kind: ToolKind::GoCompileRun,
+            execution_model: ExecutionModel::Compiled,
+        },
+        LanguageInfo {
+            language: "c",
+            display: "C",
+            tool_kind: ToolKind::CCompileRun,
+            execution_model: ExecutionModel::Compiled,
+        },
+        LanguageInfo {
+            language: "cpp",
+            display: "C++",
+            tool_kind: ToolKind::CppCompileRun,
+            execution_model: ExecutionModel::Compiled,
+        },
+        LanguageInfo {
+            language: "java",
+            display: "Java",
+            tool_kind: ToolKind::JavaCompileRun,
+            execution_model: ExecutionModel::Compiled,
+        },
+        LanguageInfo {
+            language: "ruby",
+            display: "Ruby",
+            tool_kind: ToolKind::RubyExec,
+            execution_model: ExecutionModel::Interpreted,
+        },
+        LanguageInfo {
+            language: "bash",
+            display: "Bash",
+            tool_kind: ToolKind::BashExec,
+            execution_model: ExecutionModel::Interpreted,
+        },
+        LanguageInfo {
+            language: "typst",
+            display: "Typst",
+            tool_kind: ToolKind::TypstCompile,
+            execution_model: ExecutionModel::Compiled,
+        },
     ]
 }

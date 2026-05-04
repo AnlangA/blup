@@ -28,6 +28,11 @@ fn main() {
             blup_desktop::commands::export::export_curriculum_pdf,
             blup_desktop::commands::export::export_typst,
             blup_desktop::commands::export::export_curriculum_typst,
+            blup_desktop::commands::sandbox::sandbox_execute,
+            blup_desktop::commands::sandbox::sandbox_interactive_start,
+            blup_desktop::commands::sandbox::sandbox_interactive_stdin,
+            blup_desktop::commands::sandbox::sandbox_interactive_kill,
+            blup_desktop::commands::sandbox::sandbox_interactive_poll,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -7,8 +7,13 @@ RUN adduser -D -u 1000 sandbox
 RUN mkdir -p /workspace && chown sandbox:sandbox /workspace
 
 # Standard runner: read stdin → compile → run
-RUN printf '#!/bin/sh\nset -e\nDIR=$(mktemp -d /workspace/main_XXXXXX)\ncat > "$DIR/main.go"\ncd "$DIR" && go build -o a.out main.go && ./a.out\n' \
-    > /usr/local/bin/sandbox-run-go && chmod +x /usr/local/bin/sandbox-run-go
+RUN cat > /usr/local/bin/sandbox-run-go << 'SCRIPT' && chmod +x /usr/local/bin/sandbox-run-go
+#!/bin/sh
+set -e
+DIR=$(mktemp -d /workspace/main_XXXXXX)
+cat > "$DIR/main.go"
+cd "$DIR" && go build -o a.out main.go && ./a.out
+SCRIPT
 
 # Switch to sandbox user
 USER sandbox

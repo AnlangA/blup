@@ -13,6 +13,23 @@ export interface SSEHandlers {
   onStderr?: (content: string) => void;
 }
 
+export type SandboxWSClientMessage =
+  | { type: 'stdin'; data: string }
+  | { type: 'resize'; cols: number; rows: number };
+
+export type SandboxWSServerMessage =
+  | { type: 'stdout'; data: string }
+  | { type: 'stderr'; data: string }
+  | { type: 'exit'; code: number | null }
+  | { type: 'error'; code: string; message: string };
+
+export interface SandboxWSHandlers {
+  onOpen?: () => void;
+  onMessage?: (message: SandboxWSServerMessage) => void;
+  onClose?: () => void;
+  onError?: (message: string) => void;
+}
+
 /**
  * Client for Server-Sent Events, supporting both GET (EventSource) and
  * POST (fetch + ReadableStream) modes.
@@ -254,3 +271,41 @@ export class SSEClient {
 }
 
 export const sseClient = new SSEClient();
+
+export class SandboxWSClient {
+  private ws: WebSocket | null = null;
+
+  connect(path: string, handlers: SandboxWSHandlers): void {
+    this.close();
+    const base = import.meta.env.VITE_API_URL || "";
+    const httpUrl = new URL(`${base}${path}`, window.location.href);
+    httpUrl.protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
+
+    const ws = new WebSocket(httpUrl.toString());
+    this.ws = ws;
+
+    ws.onopen = () => handlers.onOpen?.();
+    ws.onmessage = (event) => {
+      try {
+        handlers.onMessage?.(JSON.parse(event.data) as SandboxWSServerMessage);
+      } catch {
+        handlers.onError?.("Failed to parse WebSocket message");
+      }
+    };
+    ws.onerror = () => handlers.onError?.("WebSocket connection error");
+    ws.onclose = () => handlers.onClose?.();
+  }
+
+  send(message: SandboxWSClientMessage): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+    }
+  }
+
+  close(): void {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+}

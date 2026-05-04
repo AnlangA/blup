@@ -337,9 +337,7 @@ fn test_chapter_markdown_repair_prompt_preserves_code_block_formatting() {
     let loader = PromptLoader::new("../prompts");
     let prompt = loader.load("chapter_markdown_repair", 1).unwrap();
 
-    assert!(prompt.contains(
-        "ensure each fenced code block has a correct language identifier"
-    ));
+    assert!(prompt.contains("ensure each fenced code block has a correct language identifier"));
     assert!(prompt
         .contains("Preserve an existing code fence language identifier when it is still correct."));
     assert!(prompt.contains("Do NOT nest fenced code blocks."));

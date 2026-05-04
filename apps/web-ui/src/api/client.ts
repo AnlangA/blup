@@ -135,6 +135,11 @@ export interface SandboxHealth {
   images: Array<{ name: string; version: string }>;
 }
 
+export interface InteractiveStartResponse {
+  interactive_id: string;
+  container_id: string;
+}
+
 // ── Client ──
 
 export class ApiClient {
@@ -266,6 +271,16 @@ export class ApiClient {
 
   async getSandboxHealth(): Promise<SandboxHealth> {
     return this.request("GET", "/api/sandbox/health");
+  }
+
+  async startInteractiveSandbox(
+    req: SandboxExecuteRequest,
+  ): Promise<InteractiveStartResponse> {
+    return this.request("POST", "/api/sandbox/interactive/start", req);
+  }
+
+  async killInteractiveSandbox(interactiveId: string): Promise<{ killed: boolean }> {
+    return this.request("POST", `/api/sandbox/interactive/${interactiveId}/kill`);
   }
 }
 

@@ -27,5 +27,8 @@ pub use messages::{get_messages_paginated, MessagesQuery};
 pub use profile::submit_profile_answer;
 pub use progress::get_all_progress;
 pub use question::ask_question;
-pub use sandbox::{sandbox_execute_stream, sandbox_health};
+pub use sandbox::{
+    interactive_kill, interactive_list, interactive_start, interactive_ws, sandbox_execute_stream,
+    sandbox_health,
+};
 pub use session::{create_session, delete_session, get_session_status, list_sessions};

@@ -4,6 +4,7 @@ pub mod error;
 pub mod executor;
 pub mod generated;
 pub mod models;
+pub mod session;
 
 pub use config::SandboxConfig;
 pub use error::SandboxError;
@@ -12,22 +13,32 @@ pub use generated::{ExecutionModel, ToolKind};
 pub use models::request::SandboxRequest;
 pub use models::result::SandboxResult;
 pub use models::status::ExecutionStatus;
+pub use session::{
+    InteractiveOutput, InteractiveSessionInfo, InteractiveSessionManager, InteractiveStartResult,
+};
+use tokio::sync::mpsc;
+use uuid::Uuid;
 
 pub struct SandboxManager {
     executor: Box<dyn SandboxExecutor>,
+    interactive: InteractiveSessionManager,
 }
 
 impl SandboxManager {
     /// Create a manager with a Docker executor (requires Docker daemon).
     pub fn new(config: SandboxConfig) -> Self {
         Self {
-            executor: Box::new(DockerExecutor::new(config)),
+            executor: Box::new(DockerExecutor::new(config.clone())),
+            interactive: InteractiveSessionManager::new(config),
         }
     }
 
     /// Create a manager with a custom executor (e.g. MockExecutor for tests).
     pub fn with_executor(executor: Box<dyn SandboxExecutor>) -> Self {
-        Self { executor }
+        Self {
+            executor,
+            interactive: InteractiveSessionManager::new(SandboxConfig::default()),
+        }
     }
 
     pub async fn execute(&self, request: SandboxRequest) -> Result<SandboxResult, SandboxError> {
@@ -41,13 +52,47 @@ impl SandboxManager {
     pub fn image_info(&self) -> Vec<models::image::ImageInfo> {
         self.executor.image_info()
     }
+
+    pub async fn start_interactive(
+        &self,
+        request: SandboxRequest,
+    ) -> Result<InteractiveStartResult, SandboxError> {
+        self.interactive.start(request).await
+    }
+
+    pub async fn attach_interactive_output(
+        &self,
+        interactive_id: Uuid,
+    ) -> Result<mpsc::Receiver<InteractiveOutput>, SandboxError> {
+        self.interactive.attach_output(interactive_id).await
+    }
+
+    pub async fn drain_interactive_output(&self, interactive_id: Uuid) -> Vec<InteractiveOutput> {
+        self.interactive.drain_output(interactive_id).await
+    }
+
+    pub async fn write_interactive_stdin(
+        &self,
+        interactive_id: Uuid,
+        data: String,
+    ) -> Result<(), SandboxError> {
+        self.interactive.write_stdin(interactive_id, data).await
+    }
+
+    pub async fn kill_interactive(&self, interactive_id: Uuid) -> Result<bool, SandboxError> {
+        self.interactive.kill(interactive_id).await
+    }
+
+    pub async fn list_interactive(&self) -> Vec<InteractiveSessionInfo> {
+        self.interactive.list().await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::limits::SandboxLimits;
     use crate::generated::ToolKind;
+    use crate::models::limits::SandboxLimits;
     use crate::models::request::SandboxRequest;
     use crate::models::result::ResourceUsage;
     use crate::models::status::ExecutionStatus;

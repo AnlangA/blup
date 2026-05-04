@@ -1,7 +1,7 @@
 FROM node:22-slim
 
-# Create sandbox user
-RUN useradd -m -u 1000 sandbox
+# Create sandbox user (node:22-slim already has UID 1000 for 'node')
+RUN usermod -l sandbox -d /home/sandbox node && mv /home/node /home/sandbox
 
 # Switch to sandbox user
 USER sandbox

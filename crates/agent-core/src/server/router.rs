@@ -68,6 +68,19 @@ pub fn build_router(state: AppState) -> Router {
             post(handlers::sandbox_execute_stream),
         )
         .route("/api/sandbox/health", get(handlers::sandbox_health))
+        .route(
+            "/api/sandbox/interactive/start",
+            post(handlers::interactive_start),
+        )
+        .route(
+            "/api/sandbox/interactive/:interactive_id/ws",
+            get(handlers::interactive_ws),
+        )
+        .route(
+            "/api/sandbox/interactive/:interactive_id/kill",
+            post(handlers::interactive_kill),
+        )
+        .route("/api/sandbox/interactive", get(handlers::interactive_list))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }

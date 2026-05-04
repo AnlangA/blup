@@ -10,8 +10,14 @@ RUN useradd -m -u 1000 sandbox
 RUN mkdir -p /workspace && chown sandbox:sandbox /workspace
 
 # Standard runner: read stdin → compile → run
-RUN printf '#!/bin/sh\nset -e\nSRC=$(mktemp /workspace/main_XXXXXX.rs)\ncat > "$SRC"\nrustc -C opt-level=0 "$SRC" -o "${SRC%.rs}"\n"${SRC%.rs}"\n' \
-    > /usr/local/bin/sandbox-run-rust && chmod +x /usr/local/bin/sandbox-run-rust
+RUN cat > /usr/local/bin/sandbox-run-rust << 'SCRIPT' && chmod +x /usr/local/bin/sandbox-run-rust
+#!/bin/sh
+set -e
+SRC=$(mktemp /workspace/main_XXXXXX.rs)
+cat > "$SRC"
+rustc -C opt-level=0 "$SRC" -o "${SRC%.rs}"
+"${SRC%.rs}"
+SCRIPT
 
 # Switch to sandbox user
 USER sandbox

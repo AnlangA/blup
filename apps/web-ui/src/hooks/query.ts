@@ -1,7 +1,17 @@
 import { useEffect, useReducer, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, downloadBlob } from "../api/client";
-import { sseClient } from "../api/sse";
+import { SandboxWSClient, SSEClient } from "../api/sse";
+import {
+  isTauri,
+  onTauriSandboxInteractive,
+  tauriSandboxExecute,
+  tauriSandboxInteractiveKill,
+  tauriSandboxInteractivePoll,
+  tauriSandboxInteractiveStart,
+  tauriSandboxInteractiveStdin,
+  type TauriInteractiveMessage,
+} from "../api/tauri-bridge";
 import type {
   LearningGoal,
   ProfileAnswer,
@@ -10,6 +20,7 @@ import type {
   CurriculumPlan,
   ChapterContent,
   ExportResult,
+  InteractiveStartResponse,
   SandboxExecuteRequest,
 } from "../api/client";
 import { useSessionStore } from "../state/sessionStore";
@@ -193,7 +204,7 @@ export function useSubmitGoalStream(sessionId: string | null) {
     error: null,
     result: null,
   });
-  const sseRef = useRef(sseClient);
+  const sseRef = useRef(new SSEClient());
 
   const submit = useCallback(
     (goal: LearningGoal) => {
@@ -435,7 +446,7 @@ export function useExportChapterPdf(
     error: null,
     result: null,
   });
-  const sseRef = useRef(sseClient);
+  const sseRef = useRef(new SSEClient());
 
   const exportPdf = useCallback(() => {
     if (!sessionId || !chapterId) return;
@@ -493,7 +504,7 @@ export function useExportCurriculumPdf(sessionId: string | null) {
     error: null,
     result: null,
   });
-  const sseRef = useRef(sseClient);
+  const sseRef = useRef(new SSEClient());
 
   const exportPdf = useCallback(() => {
     if (!sessionId) return;
@@ -621,11 +632,31 @@ export function useSandboxExecute() {
     exitCode: null,
     durationMs: null,
   });
-  const sseRef = useRef(sseClient);
+  const sseRef = useRef(new SSEClient());
 
   const execute = useCallback((req: SandboxExecuteRequest) => {
     sseRef.current.close();
     dispatch({ type: "executing" });
+
+    if (isTauri()) {
+      void tauriSandboxExecute(req as unknown as Record<string, unknown>)
+        .then((result) => {
+          if (result.stdout) dispatch({ type: "stdout", content: result.stdout });
+          if (result.stderr) dispatch({ type: "stderr", content: result.stderr });
+          dispatch({
+            type: "done",
+            exitCode: result.exit_code,
+            durationMs: result.duration_ms,
+          });
+        })
+        .catch((err) => {
+          dispatch({
+            type: "error",
+            message: err instanceof Error ? err.message : String(err),
+          });
+        });
+      return;
+    }
 
     sseRef.current.connectPost("/api/sandbox/execute", req, {
       onStatus: (st, msg) =>
@@ -659,4 +690,230 @@ export function useSandboxExecute() {
   }, []);
 
   return { ...state, execute, reset };
+}
+
+interface InteractiveSandboxState {
+  output: string;
+  stderr: string;
+  isStarting: boolean;
+  isConnected: boolean;
+  error: string | null;
+  exitCode: number | null;
+  interactiveId: string | null;
+  containerId: string | null;
+}
+
+type InteractiveSandboxAction =
+  | { type: "starting" }
+  | { type: "started"; result: InteractiveStartResponse }
+  | { type: "connected" }
+  | { type: "stdout"; data: string }
+  | { type: "stderr"; data: string }
+  | { type: "exit"; code: number | null }
+  | { type: "error"; message: string }
+  | { type: "closed" }
+  | { type: "reset" };
+
+function interactiveSandboxReducer(
+  state: InteractiveSandboxState,
+  action: InteractiveSandboxAction,
+): InteractiveSandboxState {
+  switch (action.type) {
+    case "starting":
+      return {
+        output: "",
+        stderr: "",
+        isStarting: true,
+        isConnected: false,
+        error: null,
+        exitCode: null,
+        interactiveId: null,
+        containerId: null,
+      };
+    case "started":
+      return {
+        ...state,
+        isStarting: false,
+        interactiveId: action.result.interactive_id,
+        containerId: action.result.container_id,
+      };
+    case "connected":
+      return { ...state, isConnected: true };
+    case "stdout":
+      return { ...state, output: state.output + action.data };
+    case "stderr":
+      return { ...state, stderr: state.stderr + action.data };
+    case "exit":
+      return { ...state, isConnected: false, isStarting: false, exitCode: action.code };
+    case "error":
+      return { ...state, isConnected: false, isStarting: false, error: action.message };
+    case "closed":
+      return { ...state, isConnected: false, isStarting: false };
+    case "reset":
+      return {
+        output: "",
+        stderr: "",
+        isStarting: false,
+        isConnected: false,
+        error: null,
+        exitCode: null,
+        interactiveId: null,
+        containerId: null,
+      };
+  }
+}
+
+export function useInteractiveSandbox() {
+  const [state, dispatch] = useReducer(interactiveSandboxReducer, {
+    output: "",
+    stderr: "",
+    isStarting: false,
+    isConnected: false,
+    error: null,
+    exitCode: null,
+    interactiveId: null,
+    containerId: null,
+  });
+  const wsRef = useRef(new SandboxWSClient());
+  const interactiveIdRef = useRef<string | null>(null);
+  const unlistenRef = useRef<(() => void) | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const handleInteractiveMessage = useCallback((message: TauriInteractiveMessage) => {
+    switch (message.type) {
+      case "stdout":
+        dispatch({ type: "stdout", data: message.data });
+        break;
+      case "stderr":
+        dispatch({ type: "stderr", data: message.data });
+        break;
+      case "exit":
+        dispatch({ type: "exit", code: message.code });
+        interactiveIdRef.current = null;
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        break;
+      case "error":
+        dispatch({ type: "error", message: message.message });
+        break;
+    }
+  }, []);
+
+  const killCurrent = useCallback(() => {
+    const currentId = interactiveIdRef.current;
+    wsRef.current.close();
+    unlistenRef.current?.();
+    unlistenRef.current = null;
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    if (currentId) {
+      if (isTauri()) {
+        void tauriSandboxInteractiveKill(currentId).catch(() => undefined);
+      } else {
+        void api.killInteractiveSandbox(currentId).catch(() => undefined);
+      }
+      interactiveIdRef.current = null;
+    }
+  }, []);
+
+  const start = useCallback(async (req: SandboxExecuteRequest) => {
+    killCurrent();
+    dispatch({ type: "starting" });
+    try {
+      if (isTauri()) {
+        const unlisten = onTauriSandboxInteractive((message) => {
+          if (message.interactive_id !== interactiveIdRef.current) return;
+          handleInteractiveMessage(message);
+        });
+        unlistenRef.current = unlisten;
+        const result = await tauriSandboxInteractiveStart(
+          req as unknown as Record<string, unknown>,
+        );
+        interactiveIdRef.current = result.interactive_id;
+        dispatch({ type: "started", result });
+        dispatch({ type: "connected" });
+        pollTimerRef.current = setInterval(() => {
+          const id = interactiveIdRef.current;
+          if (!id) return;
+          void tauriSandboxInteractivePoll(id)
+            .then((messages) => {
+              for (const message of messages) {
+                if (message.interactive_id === id) handleInteractiveMessage(message);
+              }
+            })
+            .catch(() => undefined);
+        }, 250);
+        return;
+      }
+
+      const result = await api.startInteractiveSandbox(req);
+      interactiveIdRef.current = result.interactive_id;
+      dispatch({ type: "started", result });
+      wsRef.current.connect(`/api/sandbox/interactive/${result.interactive_id}/ws`, {
+        onOpen: () => dispatch({ type: "connected" }),
+        onMessage: (message) => {
+          switch (message.type) {
+            case "stdout":
+              dispatch({ type: "stdout", data: message.data });
+              break;
+            case "stderr":
+              dispatch({ type: "stderr", data: message.data });
+              break;
+            case "exit":
+              dispatch({ type: "exit", code: message.code });
+              interactiveIdRef.current = null;
+              break;
+            case "error":
+              dispatch({ type: "error", message: message.message });
+              break;
+          }
+        },
+        onClose: () => dispatch({ type: "closed" }),
+        onError: (message) => dispatch({ type: "error", message }),
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : (err as { message?: string })?.message || "Failed to start interactive sandbox";
+      dispatch({ type: "error", message });
+    }
+  }, [handleInteractiveMessage, killCurrent]);
+
+  const sendInput = useCallback((data: string) => {
+    const currentId = interactiveIdRef.current;
+    if (isTauri() && currentId) {
+      void tauriSandboxInteractiveStdin(currentId, data)
+        .then((messages) => {
+          for (const message of messages) {
+            if (message.interactive_id === currentId) handleInteractiveMessage(message);
+          }
+        })
+        .catch((err) => {
+          dispatch({
+            type: "error",
+            message: err instanceof Error ? err.message : String(err),
+          });
+        });
+      return;
+    }
+    wsRef.current.send({ type: "stdin", data });
+  }, [handleInteractiveMessage]);
+
+  const reset = useCallback(() => {
+    killCurrent();
+    dispatch({ type: "reset" });
+  }, [killCurrent]);
+
+  useEffect(() => {
+    return () => {
+      killCurrent();
+    };
+  }, [killCurrent]);
+
+  return { ...state, start, sendInput, reset, kill: killCurrent };
 }

@@ -46,3 +46,27 @@ pub struct SandboxExecuteRequest {
     #[serde(default)]
     pub timeout_secs: Option<u64>,
 }
+
+pub type InteractiveStartRequest = SandboxExecuteRequest;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InteractiveStartResponse {
+    pub interactive_id: String,
+    pub container_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InteractiveClientMessage {
+    Stdin { data: String },
+    Resize { cols: u16, rows: u16 },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InteractiveServerMessage {
+    Stdout { data: String },
+    Stderr { data: String },
+    Exit { code: Option<i32> },
+    Error { code: String, message: String },
+}

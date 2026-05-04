@@ -6,12 +6,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install ts-node for TypeScript execution
 RUN npm install -g ts-node@10.9.2 typescript@5.4
 
-# Create sandbox user
-RUN useradd -m -u 1000 sandbox
+# Create sandbox user (node:22-slim already has UID 1000 for 'node')
+RUN usermod -l sandbox -d /home/sandbox node && mv /home/node /home/sandbox
 
 # Standard runner: read stdin → transpile → run
-RUN printf '#!/bin/sh\nset -e\nSRC=$(mktemp /workspace/main_XXXXXX.ts)\ncat > "$SRC"\nts-node --transpile-only "$SRC"\n' \
-    > /usr/local/bin/sandbox-run-ts && chmod +x /usr/local/bin/sandbox-run-ts
+RUN cat > /usr/local/bin/sandbox-run-ts << 'SCRIPT' && chmod +x /usr/local/bin/sandbox-run-ts
+#!/bin/sh
+set -e
+SRC=$(mktemp /workspace/main_XXXXXX.ts)
+cat > "$SRC"
+ts-node --transpile-only "$SRC"
+SCRIPT
 
 # Switch to sandbox user
 USER sandbox

@@ -1002,6 +1002,56 @@ button.secondary {
   border-top: 1px solid var(--color-border);
 }
 
+.interactive-terminal {
+  margin-top: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+.interactive-terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid #30363d;
+  color: #8b949e;
+  font-size: 0.75rem;
+}
+
+.interactive-terminal-screen {
+  min-height: 120px;
+  max-height: 280px;
+  overflow: auto;
+  margin: 0;
+  padding: 0.75rem;
+  color: #e6edf3;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.interactive-terminal-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid #30363d;
+  color: #3fb950;
+  font-family: var(--font-mono);
+}
+
+.interactive-terminal-input input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #e6edf3;
+  font: inherit;
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 1024px) {
   .chat-window { display: none; }
