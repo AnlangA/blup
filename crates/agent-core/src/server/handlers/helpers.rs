@@ -37,7 +37,9 @@ pub(super) fn sse_serialize<T: serde::Serialize>(event: &T) -> String {
 }
 
 /// Resolve the profile JSON, falling back to the default if serialization fails or profile is absent.
-pub(super) fn resolve_profile_json(profile: Option<&crate::state::domain::UserProfile>) -> serde_json::Value {
+pub(super) fn resolve_profile_json(
+    profile: Option<&crate::state::domain::UserProfile>,
+) -> serde_json::Value {
     profile
         .map(|p| serde_json::to_value(p).unwrap_or_else(|_| default_profile_json()))
         .unwrap_or_else(default_profile_json)

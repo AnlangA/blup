@@ -1479,7 +1479,9 @@ async fn test_sandbox_execute_stream_success() {
 
     if status.is_success() {
         assert!(
-            text.contains("event:status") || text.contains("event:done") || text.contains("event:error"),
+            text.contains("event:status")
+                || text.contains("event:done")
+                || text.contains("event:error"),
             "SSE stream should contain events: {text}"
         );
     }
@@ -1572,9 +1574,7 @@ async fn test_sandbox_interactive_start_and_list() {
 
             // Kill the session
             let (kill_status, kill_body) = h
-                .post_empty(&format!(
-                    "/api/sandbox/interactive/{interactive_id}/kill"
-                ))
+                .post_empty(&format!("/api/sandbox/interactive/{interactive_id}/kill"))
                 .await;
             assert_eq!(kill_status, 200);
             assert!(kill_body["killed"].is_boolean());

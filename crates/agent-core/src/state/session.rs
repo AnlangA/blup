@@ -167,7 +167,11 @@ impl InMemorySessionStore {
             let snapshot: SessionSnapshot = match serde_json::from_str(&content) {
                 Ok(s) => s,
                 Err(e) => {
-                    tracing::warn!(path = %path.display(), error = %e, "Failed to deserialize session");
+                    let fname = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown");
+                    tracing::warn!(file = %fname, error = %e, "Failed to deserialize session");
                     continue;
                 }
             };
@@ -178,7 +182,7 @@ impl InMemorySessionStore {
         }
 
         if count > 0 {
-            tracing::info!(count, dir = %dir.display(), "Loaded persisted sessions");
+            tracing::info!(count, "Loaded persisted sessions");
         }
     }
 
@@ -200,10 +204,10 @@ impl InMemorySessionStore {
         match serde_json::to_string(&snapshot) {
             Ok(json) => {
                 if let Err(e) = tokio::fs::write(&path, &json).await {
-                    tracing::warn!(path = %path.display(), error = %e, "Failed to persist session, retrying");
+                    tracing::warn!(session_id = %id, error = %e, "Failed to persist session, retrying");
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     if let Err(e2) = tokio::fs::write(&path, &json).await {
-                        tracing::error!(path = %path.display(), error = %e2, "Persist failed after retry");
+                        tracing::error!(session_id = %id, error = %e2, "Persist failed after retry");
                     }
                 }
             }

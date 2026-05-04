@@ -23,9 +23,9 @@ async fn main() -> anyhow::Result<()> {
         host = %config.host,
         port = %config.port,
         model = %config.llm_model,
-        prompts_dir = %config.prompts_dir.display(),
-        schemas_dir = %config.schemas_dir.display(),
-        data_dir = %config.data_dir.display(),
+        has_prompts = !config.prompts_dir.as_os_str().is_empty(),
+        has_schemas = !config.schemas_dir.as_os_str().is_empty(),
+        has_data_dir = !config.data_dir.as_os_str().is_empty(),
         max_sessions = config.max_sessions,
         session_ttl_hours = config.session_ttl_hours,
         "Starting agent-core"

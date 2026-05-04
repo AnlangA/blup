@@ -64,6 +64,10 @@
           "type": "integer",
           "minimum": 0,
           "description": "Disk usage in KB"
+        },
+        "oom_killed": {
+          "type": "boolean",
+          "description": "Whether the container was killed by the OOM killer"
         }
       }
     },

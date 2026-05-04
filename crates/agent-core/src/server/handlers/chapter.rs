@@ -6,7 +6,9 @@ use uuid::Uuid;
 
 use blup_agent::step::*;
 
-use super::helpers::{build_curriculum_context, load_or_404, next_sse_id, resolve_profile_json, sse_serialize};
+use super::helpers::{
+    build_curriculum_context, load_or_404, next_sse_id, resolve_profile_json, sse_serialize,
+};
 use super::types::SseEvent;
 use crate::error::ApiError;
 use crate::state::domain as d;
