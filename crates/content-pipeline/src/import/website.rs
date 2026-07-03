@@ -1,3 +1,4 @@
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use uuid::Uuid;
 
 use super::chunker::{chunk_text, ChunkConfig};
@@ -16,12 +17,7 @@ pub async fn import_website(url: &str) -> Result<SourceDocument, ImportError> {
     let host = parsed
         .host_str()
         .ok_or_else(|| ImportError::InvalidUrl(url.to_string()))?;
-    if is_private_host(host) {
-        return Err(ImportError::UrlBlocked {
-            url: url.to_string(),
-            reason: "Cannot import from internal/private URLs".to_string(),
-        });
-    }
+    ensure_public_host(host, parsed.port_or_known_default(), url).await?;
 
     // 3. Fetch URL content
     let client = reqwest::Client::builder()
@@ -51,12 +47,12 @@ pub async fn import_website(url: &str) -> Result<SourceDocument, ImportError> {
     }
 
     if let Some(final_host) = response.url().host_str() {
-        if is_private_host(final_host) {
-            return Err(ImportError::UrlBlocked {
-                url: response.url().to_string(),
-                reason: "Cannot import from internal/private URLs after redirects".to_string(),
-            });
-        }
+        ensure_public_host(
+            final_host,
+            response.url().port_or_known_default(),
+            response.url().as_str(),
+        )
+        .await?;
     }
 
     let html = response
@@ -191,6 +187,83 @@ fn is_private_host(host: &str) -> bool {
         || host.starts_with("0.")
 }
 
+async fn ensure_public_host(host: &str, port: Option<u16>, url: &str) -> Result<(), ImportError> {
+    if is_private_host(host) {
+        return Err(ImportError::UrlBlocked {
+            url: url.to_string(),
+            reason: "Cannot import from internal/private URLs".to_string(),
+        });
+    }
+
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        if is_blocked_ip(ip) {
+            return Err(ImportError::UrlBlocked {
+                url: url.to_string(),
+                reason: "Cannot import from private, loopback, link-local, multicast, or documentation IP ranges".to_string(),
+            });
+        }
+        return Ok(());
+    }
+
+    let port = port.unwrap_or(80);
+    let resolved =
+        tokio::net::lookup_host((host, port))
+            .await
+            .map_err(|e| ImportError::FetchFailed {
+                url: url.to_string(),
+                reason: format!("DNS lookup failed: {e}"),
+            })?;
+
+    for addr in resolved {
+        if is_blocked_ip(addr.ip()) {
+            return Err(ImportError::UrlBlocked {
+                url: url.to_string(),
+                reason: "Hostname resolves to a private, loopback, link-local, multicast, or documentation IP range".to_string(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn is_blocked_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => is_blocked_ipv4(ip),
+        IpAddr::V6(ip) => is_blocked_ipv6(ip),
+    }
+}
+
+fn is_blocked_ipv4(ip: Ipv4Addr) -> bool {
+    ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_broadcast()
+        || ip.is_documentation()
+        || ip.is_multicast()
+        || ip.is_unspecified()
+}
+
+fn is_blocked_ipv6(ip: Ipv6Addr) -> bool {
+    ip.is_loopback()
+        || ip.is_multicast()
+        || ip.is_unspecified()
+        || is_ipv6_unique_local(ip)
+        || is_ipv6_unicast_link_local(ip)
+        || is_ipv6_documentation(ip)
+}
+
+fn is_ipv6_unique_local(ip: Ipv6Addr) -> bool {
+    (ip.segments()[0] & 0xfe00) == 0xfc00
+}
+
+fn is_ipv6_unicast_link_local(ip: Ipv6Addr) -> bool {
+    (ip.segments()[0] & 0xffc0) == 0xfe80
+}
+
+fn is_ipv6_documentation(ip: Ipv6Addr) -> bool {
+    ip.segments()[0] == 0x2001 && ip.segments()[1] == 0x0db8
+}
+
 fn clean_whitespace(text: &str) -> String {
     let mut result = String::new();
     let mut prev_was_space = false;
@@ -219,4 +292,39 @@ fn compute_checksum(data: &[u8]) -> String {
 
 fn estimate_token_count(text: &str) -> u32 {
     (text.len() as u32) / 4
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocks_private_and_loopback_ipv4_ranges() {
+        for ip in [
+            "127.0.0.1",
+            "10.0.0.5",
+            "172.16.1.1",
+            "192.168.1.1",
+            "169.254.1.1",
+        ] {
+            assert!(is_blocked_ip(ip.parse().unwrap()), "{ip} should be blocked");
+        }
+    }
+
+    #[test]
+    fn blocks_private_and_link_local_ipv6_ranges() {
+        for ip in ["::1", "fc00::1", "fd12::1", "fe80::1", "2001:db8::1"] {
+            assert!(is_blocked_ip(ip.parse().unwrap()), "{ip} should be blocked");
+        }
+    }
+
+    #[test]
+    fn allows_public_ips() {
+        for ip in ["8.8.8.8", "2606:4700:4700::1111"] {
+            assert!(
+                !is_blocked_ip(ip.parse().unwrap()),
+                "{ip} should be allowed"
+            );
+        }
+    }
 }

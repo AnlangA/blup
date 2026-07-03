@@ -1,19 +1,33 @@
 #!/bin/sh
 # check — Run all repository validators
-# Usage: ./scripts/check [--fix] [--skip-tests]
+# Usage: ./scripts/check [--fix] [--skip-tests] [--skip-python] [--with-python] [--with-e2e] [--with-docker]
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 . "$SCRIPT_DIR/lib/colors.sh"
 
 FIX=false
 SKIP_TESTS=false
+SKIP_PYTHON=false
+WITH_PYTHON=false
+WITH_E2E=false
+WITH_DOCKER=false
 
 for arg in "$@"; do
     case "$arg" in
         --fix) FIX=true ;;
         --skip-tests) SKIP_TESTS=true ;;
+        --skip-python) SKIP_PYTHON=true ;;
+        --with-python) WITH_PYTHON=true ;;
+        --with-e2e) WITH_E2E=true ;;
+        --with-docker) WITH_DOCKER=true ;;
+        *)
+            fail "Unknown argument: $arg"
+            echo "Usage: ./scripts/check [--fix] [--skip-tests] [--skip-python] [--with-python] [--with-e2e] [--with-docker]"
+            exit 1
+            ;;
     esac
 done
 
@@ -32,8 +46,63 @@ run_check() {
     echo ""
 }
 
+deps_fingerprint() {
+    python3 - "$@" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+h = hashlib.sha256()
+for value in sys.argv[1:]:
+    if not value:
+        continue
+    path = pathlib.Path(value)
+    if path.is_file():
+        h.update(str(path).encode())
+        h.update(path.read_bytes())
+    elif path.exists():
+        h.update(str(path).encode())
+    else:
+        h.update(value.encode())
+print(h.hexdigest())
+PY
+}
+
+ensure_python_env() {
+    dir="$1"
+    req="$2"
+    extra="$3"
+    venv="$dir/.venv"
+    py="$venv/bin/python"
+    marker="$venv/.blup-check-deps"
+    pyproject="$dir/pyproject.toml"
+
+    if [ ! -x "$py" ]; then
+        python3 -m venv "$venv"
+    fi
+
+    fingerprint="$(deps_fingerprint "$req" "$pyproject" "$extra")"
+    current=""
+    if [ -f "$marker" ]; then
+        current="$(cat "$marker")"
+    fi
+
+    if [ "$current" != "$fingerprint" ]; then
+        "$py" -m pip install -q --upgrade pip
+        if [ -n "$extra" ]; then
+            # shellcheck disable=SC2086
+            "$py" -m pip install -q -r "$req" $extra
+        else
+            "$py" -m pip install -q -r "$req"
+        fi
+        echo "$fingerprint" > "$marker"
+    fi
+}
+
 echo "Blup Check — $(date)"
 echo ""
+
+cd "$PROJECT_ROOT"
 
 # 1. Rust formatting
 if $FIX; then
@@ -42,26 +111,48 @@ else
     run_check "cargo fmt --check" "cargo fmt --check"
 fi
 
-# 2. Rust linting
+# 2. Generated files must match canonical registries
+run_check "sandbox registry generated files" "tools/generate-sandbox-registry --check"
+run_check "schema TypeScript generated files" "tools/generate-schema-types --check"
+
+# 3. Rust linting
 run_check "cargo clippy" "cargo clippy --all-targets --all-features -- -D warnings"
 
-# 3. Rust tests (all workspace members)
+# 4. Rust tests (all workspace members)
 if ! $SKIP_TESTS; then
     run_check "cargo test" "cargo test --workspace"
 fi
 
-# 4. Schema validation
+# 5. Schema validation
 run_check "schema-check" "$SCRIPT_DIR/schema-check"
 
-# 5. Web UI checks (if web-ui exists)
+# 6. Web UI checks (if web-ui exists)
 if [ -f "apps/web-ui/package.json" ]; then
     cd apps/web-ui
     run_check "npm run typecheck" "npm run typecheck"
     run_check "npm run lint" "npm run lint"
     if ! $SKIP_TESTS; then
-        run_check "npm test" "npm test -- --run"
+        run_check "npm test" "npm test"
+    fi
+    run_check "npm run build" "npm run build"
+    if $WITH_E2E && ! $SKIP_TESTS; then
+        run_check "npm run test:e2e" "npm run test:e2e"
     fi
     cd ../..
+fi
+
+# 7. Python service/tool checks
+if ! $SKIP_PYTHON && { ! $SKIP_TESTS || $WITH_PYTHON; }; then
+    ensure_python_env "$PROJECT_ROOT/services/llm-gateway" "$PROJECT_ROOT/services/llm-gateway/requirements.txt" "pytest pytest-asyncio httpx tenacity"
+    run_check "pytest services/llm-gateway" "PYTHONPATH='$PROJECT_ROOT/services/llm-gateway' '$PROJECT_ROOT/services/llm-gateway/.venv/bin/python' -m pytest '$PROJECT_ROOT/services/llm-gateway/tests'"
+
+    ensure_python_env "$PROJECT_ROOT/tools/prompt-tester" "$PROJECT_ROOT/tools/prompt-tester/requirements.txt" ""
+    run_check "pytest tools/prompt-tester" "PYTHONPATH='$PROJECT_ROOT/tools/prompt-tester' '$PROJECT_ROOT/tools/prompt-tester/.venv/bin/python' -m pytest '$PROJECT_ROOT/tools/prompt-tester/tests'"
+fi
+
+# 8. Explicit heavy checks
+if $WITH_DOCKER && ! $SKIP_TESTS; then
+    run_check "cargo test ignored Docker sandbox tests" "cargo test --workspace -- --ignored"
 fi
 
 echo "=== Summary ==="

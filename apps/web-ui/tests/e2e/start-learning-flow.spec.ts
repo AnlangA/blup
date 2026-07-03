@@ -267,6 +267,16 @@ async function installApiMocks(page: Page) {
         return;
       }
 
+      // ---- GET /api/session/:id/sources ----
+      if (method === 'GET' && extraPath === 'sources') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ sources: [] }),
+        });
+        return;
+      }
+
       // ---- GET /api/session/:id/chapter/:ch_id ----
       if (method === 'GET' && extraPath.startsWith('chapter/')) {
         const chId = extraPath.replace('chapter/', '').replace('/stream', '');

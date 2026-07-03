@@ -530,3 +530,129 @@ async fn test_rollback_multiple_steps() {
     let session = storage.create_session().await.unwrap();
     assert_eq!(session.state, "IDLE");
 }
+
+#[tokio::test]
+async fn test_source_document_persistence_and_session_isolation() {
+    let storage = Storage::connect(memory_config()).await.unwrap();
+    storage.run_migrations().await.unwrap();
+
+    let session_a = storage.create_session().await.unwrap();
+    let session_b = storage.create_session().await.unwrap();
+    let sid_a = uuid::Uuid::parse_str(&session_a.id).unwrap();
+    let sid_b = uuid::Uuid::parse_str(&session_b.id).unwrap();
+
+    let doc_id = uuid::Uuid::new_v4();
+    let chunk_id = uuid::Uuid::new_v4();
+    let heading_path = vec!["Intro".to_string()];
+    let chunks = vec![storage::models::content::StoredSourceChunk {
+        id: chunk_id,
+        document_id: doc_id,
+        index: 0,
+        content: "A short imported source chunk.",
+        heading_path: &heading_path,
+        token_count: 8,
+        overlap_with_previous: false,
+    }];
+    let metadata = serde_json::json!({
+        "word_count": 5,
+        "character_count": 30,
+        "extraction_method": "text_read",
+        "extraction_confidence": 1.0,
+        "ocr_applied": false,
+        "warnings": []
+    });
+    let document = storage::models::content::StoredSourceDocument {
+        id: doc_id,
+        source_type: "plain_text",
+        title: "Imported Notes",
+        origin: "notes.txt",
+        checksum: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        language: Some("en"),
+        license_or_usage_note: None,
+        metadata: &metadata,
+        extracted_at: chrono::Utc::now(),
+        chunks: &chunks,
+    };
+
+    storage
+        .save_source_document(Some(sid_a), &document)
+        .await
+        .unwrap();
+
+    let summaries = storage.list_source_documents(sid_a).await.unwrap();
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0]["title"], "Imported Notes");
+    assert_eq!(summaries[0]["chunk_count"], 1);
+    assert_eq!(summaries[0]["word_count"], 5);
+
+    let source = storage
+        .get_source_document(sid_a, doc_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(source["id"], doc_id.to_string());
+    assert_eq!(source["chunks"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        source["chunks"][0]["content"],
+        "A short imported source chunk."
+    );
+
+    assert!(storage
+        .list_source_documents(sid_b)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(storage
+        .get_source_document(sid_b, doc_id)
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
+async fn test_import_job_persistence_and_session_isolation() {
+    let storage = Storage::connect(memory_config()).await.unwrap();
+    storage.run_migrations().await.unwrap();
+
+    let session_a = storage.create_session().await.unwrap();
+    let session_b = storage.create_session().await.unwrap();
+    let sid_a = uuid::Uuid::parse_str(&session_a.id).unwrap();
+    let sid_b = uuid::Uuid::parse_str(&session_b.id).unwrap();
+    let job_id = uuid::Uuid::new_v4();
+    let config = serde_json::json!({
+        "ocr_enabled": false,
+        "max_chunk_size_chars": 4000,
+        "chunk_overlap_chars": 200,
+        "timeout_secs": 30
+    });
+    let job = storage::models::content::StoredImportJob {
+        id: job_id,
+        session_id: Some(sid_a),
+        source_type: "website",
+        source_path: None,
+        source_url: Some("https://example.com/lesson"),
+        config: &config,
+        status: "completed",
+        error: None,
+        result_document_id: None,
+        created_at: chrono::Utc::now(),
+        completed_at: Some(chrono::Utc::now()),
+    };
+
+    storage.save_import_job(&job).await.unwrap();
+
+    let retrieved = storage
+        .get_import_job(sid_a, job_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(retrieved["id"], job_id.to_string());
+    assert_eq!(retrieved["source_type"], "website");
+    assert_eq!(retrieved["status"], "completed");
+
+    assert!(storage
+        .get_import_job(sid_b, job_id)
+        .await
+        .unwrap()
+        .is_none());
+}

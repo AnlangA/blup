@@ -47,6 +47,19 @@ pub fn build_router(state: AppState) -> Router {
             "/api/session/:id/messages",
             get(handlers::get_messages_paginated),
         )
+        .route("/api/session/:id/sources", get(handlers::list_sources))
+        .route(
+            "/api/session/:id/sources/:source_id",
+            get(handlers::get_source),
+        )
+        .route(
+            "/api/session/:id/sources/import/website",
+            post(handlers::import_website),
+        )
+        .route(
+            "/api/session/:id/imports/:job_id",
+            get(handlers::get_import_job),
+        )
         .route(
             "/api/session/:id/export/chapter/:ch_id/pdf",
             post(handlers::export_chapter_pdf_stream),

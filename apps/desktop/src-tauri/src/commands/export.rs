@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 use std::path::PathBuf;
 use tauri::{command, AppHandle, Emitter, State};
 
@@ -7,12 +6,14 @@ use crate::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportResult {
+    pub job_id: String,
     pub path: String,
     pub checksum: String,
     pub size_bytes: u64,
     pub page_count: Option<u32>,
     pub compiled: bool,
     pub format: String,
+    pub diagnostics: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -37,6 +38,7 @@ impl From<content_pipeline::error::ExportError> for ExportError {
 }
 
 async fn compile_or_save_typst(
+    job_id: uuid::Uuid,
     typst_source: &str,
     save_path: &std::path::Path,
 ) -> Result<ExportResult, ExportError> {
@@ -62,24 +64,36 @@ async fn compile_or_save_typst(
             })?;
 
             Ok(ExportResult {
+                job_id: job_id.to_string(),
                 path: save_path.to_string_lossy().to_string(),
                 checksum: artifact.checksum,
                 size_bytes: artifact.size_bytes,
                 page_count: artifact.page_count,
                 compiled: true,
                 format: "pdf".to_string(),
+                diagnostics: None,
             })
         }
         Err(err) => {
             tracing::warn!(error = %err, "PDF compilation failed; saving Typst source instead");
-            save_typst_source(typst_source, save_path)
+            save_typst_source(
+                job_id,
+                typst_source,
+                save_path,
+                Some(vec![serde_json::json!({
+                    "severity": "warning",
+                    "message": err.to_string(),
+                })]),
+            )
         }
     }
 }
 
 fn save_typst_source(
+    job_id: uuid::Uuid,
     typst_source: &str,
     save_path: &std::path::Path,
+    diagnostics: Option<Vec<serde_json::Value>>,
 ) -> Result<ExportResult, ExportError> {
     let typst_path = save_path.with_extension("typst");
     std::fs::write(&typst_path, typst_source).map_err(|e| ExportError {
@@ -90,13 +104,42 @@ fn save_typst_source(
     let artifact = content_pipeline::models::DocumentArtifact::new_typst(typst_source);
 
     Ok(ExportResult {
+        job_id: job_id.to_string(),
         path: typst_path.to_string_lossy().to_string(),
         checksum: artifact.checksum,
         size_bytes: artifact.size_bytes,
         page_count: None,
         compiled: false,
         format: "typst".to_string(),
+        diagnostics,
     })
+}
+
+fn saved_filename(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("export")
+        .to_string()
+}
+
+fn export_complete_payload(result: &ExportResult, chapter: Option<&str>) -> serde_json::Value {
+    let mut payload = serde_json::json!({
+        "job_id": &result.job_id,
+        "filename": saved_filename(&result.path),
+        "checksum": &result.checksum,
+        "size_bytes": result.size_bytes,
+        "page_count": result.page_count,
+        "compiled": result.compiled,
+        "format": &result.format,
+        "diagnostics": &result.diagnostics,
+    });
+
+    if let Some(chapter_id) = chapter {
+        payload["chapter"] = serde_json::json!(chapter_id);
+    }
+
+    payload
 }
 
 // ── Chapter export (PDF) ──
@@ -107,6 +150,7 @@ pub async fn export_chapter_pdf(
     chapter: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<ExportResult, ExportError> {
+    let job_id = uuid::Uuid::new_v4();
     let chapter_id = chapter
         .get("id")
         .and_then(|v| v.as_str())
@@ -145,16 +189,11 @@ pub async fn export_chapter_pdf(
         serde_json::json!({ "stage": "compiling", "chapter": chapter_id }),
     );
 
-    let result = compile_or_save_typst(&typst_source, &save_path).await?;
+    let result = compile_or_save_typst(job_id, &typst_source, &save_path).await?;
 
     let _ = app.emit(
         "export:complete",
-        serde_json::json!({
-            "chapter": chapter_id,
-            "path": result.path,
-            "compiled": result.compiled,
-            "format": result.format,
-        }),
+        export_complete_payload(&result, Some(chapter_id)),
     );
 
     Ok(result)
@@ -168,6 +207,7 @@ pub async fn export_curriculum_pdf(
     curriculum: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<ExportResult, ExportError> {
+    let job_id = uuid::Uuid::new_v4();
     let _ = app.emit(
         "export:progress",
         serde_json::json!({ "stage": "rendering" }),
@@ -203,16 +243,9 @@ pub async fn export_curriculum_pdf(
         serde_json::json!({ "stage": "compiling" }),
     );
 
-    let result = compile_or_save_typst(&typst_source, &save_path).await?;
+    let result = compile_or_save_typst(job_id, &typst_source, &save_path).await?;
 
-    let _ = app.emit(
-        "export:complete",
-        serde_json::json!({
-            "path": result.path,
-            "compiled": result.compiled,
-            "format": result.format,
-        }),
-    );
+    let _ = app.emit("export:complete", export_complete_payload(&result, None));
 
     Ok(result)
 }
@@ -225,6 +258,7 @@ pub async fn export_typst(
     chapter: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<ExportResult, ExportError> {
+    let job_id = uuid::Uuid::new_v4();
     let chapter_id = chapter
         .get("id")
         .and_then(|v| v.as_str())
@@ -263,24 +297,25 @@ pub async fn export_typst(
         message: format!("Failed to write Typst file: {e}"),
     })?;
 
-    let checksum = format!("sha256:{:x}", sha2::Sha256::digest(typst_source.as_bytes()));
+    let artifact = content_pipeline::models::DocumentArtifact::new_typst(&typst_source);
 
-    let _ = app.emit(
-        "export:complete",
-        serde_json::json!({
-            "chapter": chapter_id,
-            "path": typst_path.to_string_lossy().to_string(),
-        }),
-    );
-
-    Ok(ExportResult {
+    let result = ExportResult {
+        job_id: job_id.to_string(),
         path: typst_path.to_string_lossy().to_string(),
-        checksum,
-        size_bytes: typst_source.len() as u64,
+        checksum: artifact.checksum,
+        size_bytes: artifact.size_bytes,
         page_count: None,
         compiled: false,
         format: "typst".to_string(),
-    })
+        diagnostics: None,
+    };
+
+    let _ = app.emit(
+        "export:complete",
+        export_complete_payload(&result, Some(chapter_id)),
+    );
+
+    Ok(result)
 }
 
 // ── Curriculum export (Typst) ──
@@ -291,6 +326,7 @@ pub async fn export_curriculum_typst(
     curriculum: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<ExportResult, ExportError> {
+    let job_id = uuid::Uuid::new_v4();
     let _ = app.emit(
         "export:progress",
         serde_json::json!({ "stage": "rendering" }),
@@ -325,23 +361,22 @@ pub async fn export_curriculum_typst(
         message: format!("Failed to write Typst file: {e}"),
     })?;
 
-    let checksum = format!("sha256:{:x}", sha2::Sha256::digest(typst_source.as_bytes()));
+    let artifact = content_pipeline::models::DocumentArtifact::new_typst(&typst_source);
 
-    let _ = app.emit(
-        "export:complete",
-        serde_json::json!({
-            "path": typst_path.to_string_lossy().to_string(),
-        }),
-    );
-
-    Ok(ExportResult {
+    let result = ExportResult {
+        job_id: job_id.to_string(),
         path: typst_path.to_string_lossy().to_string(),
-        checksum,
-        size_bytes: typst_source.len() as u64,
+        checksum: artifact.checksum,
+        size_bytes: artifact.size_bytes,
         page_count: None,
         compiled: false,
         format: "typst".to_string(),
-    })
+        diagnostics: None,
+    };
+
+    let _ = app.emit("export:complete", export_complete_payload(&result, None));
+
+    Ok(result)
 }
 
 // ── Tests ──
@@ -523,12 +558,14 @@ mod tests {
     #[test]
     fn test_export_result_serialization() {
         let result = ExportResult {
+            job_id: uuid::Uuid::nil().to_string(),
             path: "/tmp/test.typst".to_string(),
             checksum: "sha256:abcdef1234567890".to_string(),
             size_bytes: 1024,
             page_count: None,
             compiled: false,
             format: "typst".to_string(),
+            diagnostics: None,
         };
 
         let json = serde_json::to_string(&result).expect("serialize should succeed");
@@ -540,5 +577,7 @@ mod tests {
         assert!(!parsed.compiled);
         assert_eq!(parsed.format, "typst");
         assert_eq!(parsed.page_count, None);
+        assert_eq!(parsed.job_id, uuid::Uuid::nil().to_string());
+        assert!(parsed.diagnostics.is_none());
     }
 }

@@ -46,7 +46,7 @@ Phase 2 introduced: `storage` crate (SQLite persistence), `assessment-engine` cr
 | Phase 0: Foundation | **Completed** | Make the repository buildable, checkable, and observable | root, `tools/`, `schemas/`, `docs-internal/` | bootstrap/check commands, schema validation, CI-quality policy, logging policy |
 | Phase 1: Web learning assistant MVP | **Completed** | Single-user web learning flow | `schemas/`, `crates/agent-core`, `prompts/`, `apps/web-ui`, `tests/` | usable web assistant: goal feasibility → profile → curriculum → chapter teaching |
 | Phase 2: Verification and persistence | **Completed** | Exercises, assessment, sandboxed execution, progress storage | `crates/storage`, `crates/assessment-engine`, `sandboxes/`, `tests/` | persistent learning sessions and deterministic assessment/tool results |
-| Phase 2.5: Desktop and materials workflow | Planned | Desktop packaging, imports, Typst/PDF export | `apps/desktop`, `tools/`, `crates/content-pipeline` | local desktop app, source import, learning document export |
+| Phase 2.5: Desktop and materials workflow | **In progress** | Desktop packaging, imports, Typst/PDF export | `apps/desktop`, `tools/`, `crates/content-pipeline`, `crates/storage` | local desktop app, session-aware source import, learning document export |
 | Phase 3: Extensions and interactive scenes | Planned | Plugin host and Bevy scenes | `plugins/`, `crates/plugin-host`, `crates/tool-router`, `apps/bevy-viewer`, `assets/` | permissioned plugins and interactive learning scenes |
 
 Each phase must produce a runnable, demonstrable product slice. Do not deliver only framework code or disconnected infrastructure.

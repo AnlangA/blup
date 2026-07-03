@@ -203,10 +203,22 @@ def generate_rust(registry: dict) -> str:
     ]
     if interpreted_variants:
         match_str = " | ".join(f"Self::{v}" for v in interpreted_variants)
-        lines.append(f"            {match_str} => ExecutionModel::Interpreted,")
+        if len(interpreted_variants) <= 3:
+            lines.append(f"            {match_str} => ExecutionModel::Interpreted,")
+        else:
+            lines.append(f"            {match_str} => {{")
+            lines.append("                ExecutionModel::Interpreted")
+            lines.append("            }")
     if compiled_variants:
-        match_str = " | ".join(f"Self::{v}" for v in compiled_variants)
-        lines.append(f"            {match_str} => ExecutionModel::Compiled,")
+        if len(compiled_variants) <= 4:
+            match_str = " | ".join(f"Self::{v}" for v in compiled_variants)
+            lines.append(f"            {match_str} => ExecutionModel::Compiled,")
+        else:
+            first, *rest = compiled_variants
+            lines.append(f"            Self::{first}")
+            for variant_name in rest[:-1]:
+                lines.append(f"            | Self::{variant_name}")
+            lines.append(f"            | Self::{rest[-1]} => ExecutionModel::Compiled,")
     lines.append("        }")
     lines.append("    }")
     lines.append("")
@@ -255,9 +267,11 @@ def generate_rust(registry: dict) -> str:
         ct = entry.get("compile_timeout_secs", 0)
         rt = entry.get("run_timeout_secs", 10)
         mm = entry.get("memory_mb", 512)
-        lines.append(
-            f"            Self::{variant_name} => LanguageLimits {{ compile_timeout_secs: {ct}, run_timeout_secs: {rt}, memory_mb: {mm} }},"
-        )
+        lines.append(f"            Self::{variant_name} => LanguageLimits {{")
+        lines.append(f"                compile_timeout_secs: {ct},")
+        lines.append(f"                run_timeout_secs: {rt},")
+        lines.append(f"                memory_mb: {mm},")
+        lines.append("            },")
     lines.append("        }")
     lines.append("    }")
 
@@ -288,9 +302,12 @@ def generate_rust(registry: dict) -> str:
     for lang_name, _tool_kind, variant_name, entry in variants:
         display = entry["display"]
         em = "ExecutionModel::Interpreted" if entry["execution_model"] == "interpreted" else "ExecutionModel::Compiled"
-        lines.append(
-            f'        LanguageInfo {{ language: "{lang_name}", display: "{display}", tool_kind: ToolKind::{variant_name}, execution_model: {em} }},'
-        )
+        lines.append("        LanguageInfo {")
+        lines.append(f'            language: "{lang_name}",')
+        lines.append(f'            display: "{display}",')
+        lines.append(f"            tool_kind: ToolKind::{variant_name},")
+        lines.append(f"            execution_model: {em},")
+        lines.append("        },")
     lines.append("    ]")
     lines.append("}")
     lines.append("")

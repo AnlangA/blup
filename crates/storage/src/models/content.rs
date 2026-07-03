@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -164,4 +165,229 @@ pub async fn save_export_job(
     .await?;
 
     Ok(())
+}
+
+pub async fn list_source_documents(
+    pool: &SqlitePool,
+    session_id: Uuid,
+) -> Result<Vec<serde_json::Value>, StorageError> {
+    type SourceSummaryRow = (
+        String,
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        String,
+        DateTime<Utc>,
+        i64,
+    );
+
+    let rows: Vec<SourceSummaryRow> = sqlx::query_as(
+        "SELECT d.id, d.source_type, d.title, d.origin, d.checksum, d.language, \
+         d.metadata, d.extracted_at, COUNT(c.id) AS chunk_count \
+         FROM source_documents d \
+         LEFT JOIN source_chunks c ON c.document_id = d.id \
+         WHERE d.session_id = ? \
+         GROUP BY d.id \
+         ORDER BY d.extracted_at DESC",
+    )
+    .bind(session_id.to_string())
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(
+            |(
+                id,
+                source_type,
+                title,
+                origin,
+                checksum,
+                language,
+                metadata,
+                extracted_at,
+                chunk_count,
+            )| {
+                let metadata_json: serde_json::Value = serde_json::from_str(&metadata)?;
+                Ok(serde_json::json!({
+                    "id": id,
+                    "source_type": source_type,
+                    "title": title,
+                    "origin": origin,
+                    "checksum": checksum,
+                    "language": language,
+                    "extracted_at": extracted_at,
+                    "chunk_count": chunk_count,
+                    "word_count": metadata_json
+                        .get("word_count")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0),
+                }))
+            },
+        )
+        .collect()
+}
+
+pub async fn get_source_document(
+    pool: &SqlitePool,
+    session_id: Uuid,
+    document_id: Uuid,
+) -> Result<Option<serde_json::Value>, StorageError> {
+    type DocumentRow = (
+        String,
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+        DateTime<Utc>,
+    );
+
+    let row: Option<DocumentRow> = sqlx::query_as(
+        "SELECT id, source_type, title, origin, checksum, language, \
+         license_or_usage_note, metadata, extracted_at \
+         FROM source_documents \
+         WHERE id = ? AND session_id = ?",
+    )
+    .bind(document_id.to_string())
+    .bind(session_id.to_string())
+    .fetch_optional(pool)
+    .await?;
+
+    let Some((
+        id,
+        source_type,
+        title,
+        origin,
+        checksum,
+        language,
+        license_or_usage_note,
+        metadata,
+        extracted_at,
+    )) = row
+    else {
+        return Ok(None);
+    };
+
+    type ChunkRow = (String, String, i64, String, String, i64, bool);
+    let chunk_rows: Vec<ChunkRow> = sqlx::query_as(
+        "SELECT id, document_id, chunk_index, content, heading_path, token_count, \
+         overlap_with_previous \
+         FROM source_chunks \
+         WHERE document_id = ? \
+         ORDER BY chunk_index ASC",
+    )
+    .bind(&id)
+    .fetch_all(pool)
+    .await?;
+
+    let chunks: Result<Vec<_>, StorageError> = chunk_rows
+        .into_iter()
+        .map(
+            |(
+                id,
+                document_id,
+                index,
+                content,
+                heading_path,
+                token_count,
+                overlap_with_previous,
+            )| {
+                let heading_path: Vec<String> = serde_json::from_str(&heading_path)?;
+                Ok(serde_json::json!({
+                    "id": id,
+                    "document_id": document_id,
+                    "index": index,
+                    "content": content,
+                    "heading_path": heading_path,
+                    "token_count": token_count,
+                    "overlap_with_previous": overlap_with_previous,
+                }))
+            },
+        )
+        .collect();
+
+    Ok(Some(serde_json::json!({
+        "id": id,
+        "source_type": source_type,
+        "title": title,
+        "origin": origin,
+        "checksum": checksum,
+        "language": language,
+        "license_or_usage_note": license_or_usage_note,
+        "extracted_at": extracted_at,
+        "metadata": serde_json::from_str::<serde_json::Value>(&metadata)?,
+        "chunks": chunks?,
+    })))
+}
+
+pub async fn get_import_job(
+    pool: &SqlitePool,
+    session_id: Uuid,
+    job_id: Uuid,
+) -> Result<Option<serde_json::Value>, StorageError> {
+    type ImportJobRow = (
+        String,
+        Option<String>,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        DateTime<Utc>,
+        Option<DateTime<Utc>>,
+    );
+
+    let row: Option<ImportJobRow> = sqlx::query_as(
+        "SELECT id, session_id, source_type, source_path, source_url, config, \
+         status, error, result_document_id, created_at, completed_at \
+         FROM import_jobs \
+         WHERE id = ? AND session_id = ?",
+    )
+    .bind(job_id.to_string())
+    .bind(session_id.to_string())
+    .fetch_optional(pool)
+    .await?;
+
+    row.map(
+        |(
+            id,
+            session_id,
+            source_type,
+            source_path,
+            source_url,
+            config,
+            status,
+            error,
+            result_document_id,
+            created_at,
+            completed_at,
+        )| {
+            let config: serde_json::Value = serde_json::from_str(&config)?;
+            let error = match error {
+                Some(error) => Some(serde_json::from_str::<serde_json::Value>(&error)?),
+                None => None,
+            };
+
+            Ok(serde_json::json!({
+                "id": id,
+                "session_id": session_id,
+                "source_type": source_type,
+                "source_path": source_path,
+                "source_url": source_url,
+                "config": config,
+                "status": status,
+                "error": error,
+                "result_document_id": result_document_id,
+                "created_at": created_at,
+                "completed_at": completed_at,
+            }))
+        },
+    )
+    .transpose()
 }

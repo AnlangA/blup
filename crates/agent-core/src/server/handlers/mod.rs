@@ -11,6 +11,7 @@ mod progress;
 mod question;
 mod sandbox;
 mod session;
+mod sources;
 
 use super::types;
 
@@ -32,3 +33,4 @@ pub use sandbox::{
     sandbox_health,
 };
 pub use session::{create_session, delete_session, get_session_status, list_sessions};
+pub use sources::{get_import_job, get_source, import_website, list_sources, WebsiteImportRequest};

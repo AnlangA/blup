@@ -1,3 +1,29 @@
+import type { SandboxLanguage } from "./generated-sandbox";
+import type {
+  Chapter as SchemaChapter,
+  ChapterProgress,
+  CurriculumPlan,
+  FeasibilityResult,
+  LearningGoal,
+  SourceDocument,
+  ImportJob,
+} from "./generated-schemas";
+
+export type {
+  ChapterProgress,
+  CurriculumPlan,
+  DocumentArtifact,
+  ExportJob,
+  ImportJob,
+  LearningGoal,
+  SandboxRequest,
+  SandboxResult,
+  SourceDocument,
+} from "./generated-schemas";
+
+export type Chapter = CurriculumPlan["chapters"][number];
+export type FullChapter = SchemaChapter;
+
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
 export interface ApiError {
@@ -12,25 +38,12 @@ export interface CreateSessionResponse {
   state: string;
 }
 
-export interface LearningGoal {
-  description: string;
-  domain: string;
-  context?: string;
-  current_level?: string;
-}
-
 export interface GoalSubmitResult {
   feasibility: FeasibilityData;
   state: string;
 }
 
-export interface FeasibilityData {
-  feasible: boolean;
-  reason: string;
-  suggestions: string[];
-  estimated_duration?: string;
-  prerequisites: string[];
-}
+export type FeasibilityData = FeasibilityResult;
 
 export interface ProfileAnswer {
   question_id: string;
@@ -43,29 +56,6 @@ export interface ProfileAnswerResult {
   state: string;
 }
 
-export interface Chapter {
-  id: string;
-  title: string;
-  order: number;
-  objectives: string[];
-  estimated_minutes?: number;
-  prerequisites?: string[];
-  key_concepts?: string[];
-  exercises?: Array<{
-    question?: string;
-    options?: string[];
-    type?: string;
-    [key: string]: unknown;
-  }>;
-}
-
-export interface CurriculumPlan {
-  title: string;
-  description: string;
-  chapters: Chapter[];
-  estimated_duration: string;
-}
-
 export interface ChapterContent {
   id: string;
   role: string;
@@ -75,13 +65,6 @@ export interface ChapterContent {
 
 export interface QuestionRequest {
   question: string;
-}
-
-export interface ChapterProgress {
-  chapter_id: string;
-  status: string;
-  completion: number;
-  last_accessed: string;
 }
 
 export interface SessionListEntry {
@@ -112,15 +95,16 @@ export interface SessionSnapshot {
 }
 
 export interface ExportResult {
+  job_id?: string;
   filename: string;
   checksum: string;
   size_bytes?: number;
   pdf_base64?: string;
   typst_source?: string;
   page_count?: number;
+  compiled?: boolean;
+  diagnostics?: Array<{ severity: string; message: string }>;
 }
-
-import type { SandboxLanguage } from "./generated-sandbox";
 
 export interface SandboxExecuteRequest {
   session_id: string;
@@ -138,6 +122,28 @@ export interface SandboxHealth {
 export interface InteractiveStartResponse {
   interactive_id: string;
   container_id: string;
+}
+
+export interface SourceSummary {
+  id: string;
+  source_type: SourceDocument["source_type"];
+  title: string;
+  origin: string;
+  checksum: string;
+  language?: string;
+  extracted_at: string;
+  chunk_count: number;
+  word_count: number;
+}
+
+export interface WebsiteImportRequest {
+  url: string;
+}
+
+export interface WebsiteImportResponse {
+  job_id: string;
+  document: SourceDocument;
+  job: ImportJob;
 }
 
 // ── Client ──
@@ -271,6 +277,36 @@ export class ApiClient {
 
   async getSandboxHealth(): Promise<SandboxHealth> {
     return this.request("GET", "/api/sandbox/health");
+  }
+
+  async listSources(sessionId: string): Promise<SourceSummary[]> {
+    const response = await this.request<{ sources: SourceSummary[] }>(
+      "GET",
+      `/api/session/${sessionId}/sources`,
+    );
+    return response.sources;
+  }
+
+  async getSource(
+    sessionId: string,
+    sourceId: string,
+  ): Promise<SourceDocument> {
+    return this.request("GET", `/api/session/${sessionId}/sources/${sourceId}`);
+  }
+
+  async importWebsite(
+    sessionId: string,
+    req: WebsiteImportRequest,
+  ): Promise<WebsiteImportResponse> {
+    return this.request(
+      "POST",
+      `/api/session/${sessionId}/sources/import/website`,
+      req,
+    );
+  }
+
+  async getImportJob(sessionId: string, jobId: string): Promise<ImportJob> {
+    return this.request("GET", `/api/session/${sessionId}/imports/${jobId}`);
   }
 
   async startInteractiveSandbox(

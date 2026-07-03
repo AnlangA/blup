@@ -2,6 +2,7 @@ import { useSessionStore, CodeTheme } from '../../state/sessionStore';
 import { useCurriculum } from '../../hooks/query';
 import type { Chapter } from '../../api/client';
 import { ExportButton } from '../export/ExportButton';
+import { MaterialsPanel } from '../materials/MaterialsPanel';
 
 export function CurriculumSidebar() {
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -69,6 +70,7 @@ export function CurriculumSidebar() {
             />
           ))}
       </ul>
+      <MaterialsPanel />
     </aside>
   );
 }

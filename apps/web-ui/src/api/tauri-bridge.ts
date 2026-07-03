@@ -7,12 +7,27 @@
  */
 
 export interface TauriExportResult {
+  job_id: string;
   path: string;
   checksum: string;
   size_bytes: number;
   page_count: number | null;
   compiled: boolean;
   format: string;
+  diagnostics?: Array<{ severity: string; message: string }>;
+}
+
+export interface TauriExportCompleteEvent {
+  chapter?: string;
+  session?: string;
+  job_id: string;
+  filename: string;
+  checksum: string;
+  size_bytes: number;
+  page_count?: number | null;
+  compiled?: boolean;
+  format?: string;
+  diagnostics?: Array<{ severity: string; message: string }>;
 }
 
 export interface TauriSandboxResult {
@@ -26,6 +41,17 @@ export interface TauriSandboxResult {
 export interface TauriInteractiveStartResult {
   interactive_id: string;
   container_id: string;
+}
+
+export interface TauriImportResult {
+  job_id: string;
+  doc_id: string;
+  title: string;
+  source_type: string;
+  checksum: string;
+  chunks: number;
+  word_count: number;
+  language: string | null;
 }
 
 export type TauriInteractiveMessage =
@@ -91,6 +117,23 @@ export async function tauriExportCurriculumTypst(
   const tauri = getTauri();
   if (!tauri) throw new Error("Tauri not available");
   return tauri.invoke("export_curriculum_typst", { curriculum }) as Promise<TauriExportResult>;
+}
+
+export async function tauriImportFile(
+  sessionId?: string | null,
+): Promise<TauriImportResult> {
+  const tauri = getTauri();
+  if (!tauri) throw new Error("Tauri not available");
+  return tauri.invoke("import_file", { sessionId }) as Promise<TauriImportResult>;
+}
+
+export async function tauriImportWebsite(
+  sessionId: string,
+  url: string,
+): Promise<TauriImportResult> {
+  const tauri = getTauri();
+  if (!tauri) throw new Error("Tauri not available");
+  return tauri.invoke("import_website", { sessionId, url }) as Promise<TauriImportResult>;
 }
 
 export async function tauriSandboxExecute(
@@ -176,13 +219,7 @@ export function onTauriExportProgress(
 }
 
 export function onTauriExportComplete(
-  callback: (data: {
-    chapter?: string;
-    session?: string;
-    path: string;
-    compiled?: boolean;
-    format?: string;
-  }) => void,
+  callback: (data: TauriExportCompleteEvent) => void,
 ): () => void {
   if (typeof window === "undefined") return () => {};
 
@@ -190,13 +227,7 @@ export function onTauriExportComplete(
   if (tauri?.event) {
     let unlisten: (() => void) | null = null;
     tauri.event.listen("export:complete", (event) => {
-      callback(event.payload as {
-        chapter?: string;
-        session?: string;
-        path: string;
-        compiled?: boolean;
-        format?: string;
-      });
+      callback(event.payload as TauriExportCompleteEvent);
     }).then((fn) => { unlisten = fn; });
     return () => { unlisten?.(); };
   }

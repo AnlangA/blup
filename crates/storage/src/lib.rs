@@ -233,4 +233,27 @@ impl Storage {
     ) -> Result<(), StorageError> {
         models::content::save_export_job(self.pool(), job).await
     }
+
+    pub async fn list_source_documents(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<serde_json::Value>, StorageError> {
+        models::content::list_source_documents(self.pool(), session_id).await
+    }
+
+    pub async fn get_source_document(
+        &self,
+        session_id: Uuid,
+        document_id: Uuid,
+    ) -> Result<Option<serde_json::Value>, StorageError> {
+        models::content::get_source_document(self.pool(), session_id, document_id).await
+    }
+
+    pub async fn get_import_job(
+        &self,
+        session_id: Uuid,
+        job_id: Uuid,
+    ) -> Result<Option<serde_json::Value>, StorageError> {
+        models::content::get_import_job(self.pool(), session_id, job_id).await
+    }
 }

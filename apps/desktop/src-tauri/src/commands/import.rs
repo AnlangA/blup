@@ -6,6 +6,7 @@ use crate::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ImportResult {
+    pub job_id: String,
     pub doc_id: String,
     pub title: String,
     pub source_type: String,
@@ -44,6 +45,7 @@ impl From<content_pipeline::error::ImportError> for ImportError {
 #[command]
 pub async fn import_file(
     app: AppHandle,
+    #[allow(non_snake_case)] sessionId: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ImportResult, ImportError> {
     // Open native file dialog
@@ -83,12 +85,19 @@ pub async fn import_file(
         });
     }
 
-    // Emit progress
+    let parsed_session_id = parse_optional_uuid(sessionId.as_deref())?;
+    let display_name = file_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("selected file")
+        .to_string();
+
+    // Emit progress without exposing the full local path.
     let _ = app.emit(
         "import:progress",
         serde_json::json!({
             "stage": "extracting",
-            "path": file_path.to_string_lossy()
+            "name": display_name
         }),
     );
 
@@ -97,6 +106,10 @@ pub async fn import_file(
         .content_pipeline
         .import_file_job(file_path.clone())
         .await;
+    if let Some(mut job) = state.content_pipeline.get_import_job(job_id).await {
+        job.session_id = parsed_session_id;
+        state.content_pipeline.upsert_import_job(job).await;
+    }
     let source_doc = state.content_pipeline.import_file(&file_path).await?;
     if let Some(mut job) = state.content_pipeline.get_import_job(job_id).await {
         job.mark_completed(source_doc.id);
@@ -115,6 +128,7 @@ pub async fn import_file(
     );
 
     Ok(ImportResult {
+        job_id: job_id.to_string(),
         doc_id: source_doc.id.to_string(),
         title: source_doc.title,
         source_type: source_doc.source_type.to_string(),
@@ -128,9 +142,12 @@ pub async fn import_file(
 #[command]
 pub async fn import_website(
     app: AppHandle,
+    #[allow(non_snake_case)] sessionId: String,
     url: String,
     state: State<'_, AppState>,
 ) -> Result<ImportResult, ImportError> {
+    let parsed_session_id = parse_optional_uuid(Some(&sessionId))?;
+
     // Validate URL format
     let parsed = url::Url::parse(&url).map_err(|_| ImportError {
         code: "INVALID_URL".to_string(),
@@ -151,12 +168,16 @@ pub async fn import_website(
         "import:progress",
         serde_json::json!({
             "stage": "fetching",
-            "path": url
+            "job_scope": "website"
         }),
     );
 
     // Import via content pipeline
     let job_id = state.content_pipeline.import_website_job(&url).await;
+    if let Some(mut job) = state.content_pipeline.get_import_job(job_id).await {
+        job.session_id = parsed_session_id;
+        state.content_pipeline.upsert_import_job(job).await;
+    }
     let source_doc = state.content_pipeline.import_website(&url).await?;
     if let Some(mut job) = state.content_pipeline.get_import_job(job_id).await {
         job.mark_completed(source_doc.id);
@@ -175,6 +196,7 @@ pub async fn import_website(
     );
 
     Ok(ImportResult {
+        job_id: job_id.to_string(),
         doc_id: source_doc.id.to_string(),
         title: source_doc.title,
         source_type: source_doc.source_type.to_string(),
@@ -183,6 +205,18 @@ pub async fn import_website(
         word_count: source_doc.metadata.word_count,
         language: source_doc.language,
     })
+}
+
+fn parse_optional_uuid(value: Option<&str>) -> Result<Option<uuid::Uuid>, ImportError> {
+    value
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            s.parse().map_err(|_| ImportError {
+                code: "INVALID_SESSION_ID".to_string(),
+                message: "Invalid session_id UUID".to_string(),
+            })
+        })
+        .transpose()
 }
 
 fn is_private_host(host: &str) -> bool {

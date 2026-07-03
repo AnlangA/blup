@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""Generate frontend TypeScript types from JSON Schema files.
+
+Usage:
+    tools/generate-schema-types
+    tools/generate-schema-types --check
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+from typing import Any
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SCHEMAS_DIR = REPO_ROOT / "schemas"
+OUTPUT_PATH = REPO_ROOT / "apps" / "web-ui" / "src" / "api" / "generated-schemas.ts"
+
+
+def pascal_case(value: str) -> str:
+    parts = re.split(r"[^A-Za-z0-9]+", value)
+    return "".join(part[:1].upper() + part[1:] for part in parts if part)
+
+
+def property_key(name: str) -> str:
+    if re.match(r"^[A-Za-z_$][A-Za-z0-9_$]*$", name):
+        return name
+    return json.dumps(name)
+
+
+def literal(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return json.dumps(value)
+
+
+class Generator:
+    def __init__(self, root_name: str, root_schema: dict[str, Any]) -> None:
+        self.root_name = root_name
+        self.root_schema = root_schema
+        self.defs = root_schema.get("$defs", {})
+
+    def ref_to_type(self, ref: str) -> str:
+        prefix = "#/$defs/"
+        if not ref.startswith(prefix):
+            return "unknown"
+        return pascal_case(ref[len(prefix) :])
+
+    def type_for(self, schema: dict[str, Any], hint: str = "Value") -> str:
+        if "$ref" in schema:
+            return self.ref_to_type(schema["$ref"])
+
+        if "enum" in schema:
+            return " | ".join(literal(value) for value in schema["enum"])
+
+        schema_type = schema.get("type")
+        if isinstance(schema_type, list):
+            return " | ".join(
+                self.type_for({**schema, "type": item}, hint) for item in schema_type
+            )
+
+        if schema_type == "string":
+            return "string"
+        if schema_type in {"integer", "number"}:
+            return "number"
+        if schema_type == "boolean":
+            return "boolean"
+        if schema_type == "null":
+            return "null"
+        if schema_type == "array":
+            item_type = self.type_for(schema.get("items", {}), f"{hint}Item")
+            return f"Array<{item_type}>"
+        if schema_type == "object" or "properties" in schema:
+            return self.object_type(schema, hint)
+
+        return "unknown"
+
+    def object_type(self, schema: dict[str, Any], hint: str) -> str:
+        props = schema.get("properties", {})
+        additional = schema.get("additionalProperties", True)
+
+        if not props:
+            if isinstance(additional, dict):
+                return f"Record<string, {self.type_for(additional, hint + 'Value')}>"
+            return "Record<string, unknown>"
+
+        required = set(schema.get("required", []))
+        lines = ["{"]
+        for name, prop_schema in props.items():
+            optional = "" if name in required else "?"
+            prop_type = self.type_for(prop_schema, pascal_case(name))
+            lines.append(f"  {property_key(name)}{optional}: {prop_type};")
+
+        if isinstance(additional, dict):
+            lines.append(
+                f"  [key: string]: {self.type_for(additional, hint + 'Value')};"
+            )
+        elif additional is not False:
+            lines.append("  [key: string]: unknown;")
+
+        lines.append("}")
+        return "\n".join(lines)
+
+    def emit_interface(self, name: str, schema: dict[str, Any]) -> str:
+        ts_type = self.type_for(schema, name)
+        if ts_type.startswith("{\n"):
+            inner = ts_type[2:-2]
+            return f"export interface {name} {{\n{inner}\n}}"
+        return f"export type {name} = {ts_type};"
+
+    def emit(self) -> list[str]:
+        blocks: list[str] = []
+        for def_name, def_schema in sorted(self.defs.items()):
+            blocks.append(self.emit_interface(pascal_case(def_name), def_schema))
+        blocks.append(self.emit_interface(self.root_name, self.root_schema))
+        return blocks
+
+
+def load_schema_files() -> list[Path]:
+    return sorted(SCHEMAS_DIR.glob("*.v1.schema.json"))
+
+
+def generate() -> str:
+    blocks = [
+        "// AUTO-GENERATED from schemas/*.v1.schema.json - do not edit by hand.",
+        "",
+    ]
+    emitted: set[str] = set()
+    for path in load_schema_files():
+        schema = json.loads(path.read_text())
+        root_name = schema.get("title") or pascal_case(path.name.split(".v", 1)[0])
+        generator = Generator(root_name, schema)
+        for block in generator.emit():
+            name_match = re.match(r"export (?:interface|type) ([A-Za-z0-9_]+)", block)
+            name = name_match.group(1) if name_match else block
+            if name in emitted:
+                continue
+            emitted.add(name)
+            blocks.append(block)
+            blocks.append("")
+    return "\n".join(blocks).rstrip() + "\n"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Generate frontend schema types")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify generated TypeScript types match schemas without writing",
+    )
+    args = parser.parse_args()
+
+    generated = generate()
+    if args.check:
+        if not OUTPUT_PATH.exists():
+            print(f"ERROR: {OUTPUT_PATH} does not exist", file=sys.stderr)
+            return 1
+        current = OUTPUT_PATH.read_text()
+        if current != generated:
+            print(
+                "ERROR: generated-schemas.ts is out of sync with schemas. "
+                "Run 'tools/generate-schema-types'.",
+                file=sys.stderr,
+            )
+            return 1
+        print("All generated schema types are in sync.")
+        return 0
+
+    OUTPUT_PATH.write_text(generated)
+    print(f"Generated: {OUTPUT_PATH}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

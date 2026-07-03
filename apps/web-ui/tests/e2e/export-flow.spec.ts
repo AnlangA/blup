@@ -7,6 +7,16 @@ import { test, expect, type Page } from '@playwright/test';
 
 const MOCK_SESSION_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const MOCK_PDF_BASE64 = 'JVBERi0xLjQKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==';
+const MOCK_SOURCE = {
+  id: 'source-1',
+  title: 'Python Tutorial',
+  source_type: 'website',
+  origin: 'https://example.com/python',
+  checksum: 'sha256:abcdef1234567890',
+  language: 'en',
+  chunk_count: 3,
+  imported_at: new Date('2026-07-03T00:00:00.000Z').toISOString(),
+};
 
 function baseSnapshot(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -77,6 +87,46 @@ async function installExportMocks(page: Page) {
         });
       }
 
+      // Sources list
+      if (method === 'GET' && pathname === `/api/session/${MOCK_SESSION_ID}/sources`) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ sources: [MOCK_SOURCE] }),
+        });
+      }
+
+      // Website import
+      if (method === 'POST' && pathname === `/api/session/${MOCK_SESSION_ID}/sources/import/website`) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            job_id: 'import-job-1',
+            document: {
+              id: 'source-2',
+              source_type: 'website',
+              title: 'Imported Website',
+              origin: 'https://example.com/imported',
+              checksum: 'sha256:123456abcdef',
+              extracted_at: new Date('2026-07-03T00:00:00.000Z').toISOString(),
+              language: 'en',
+              chunks: [],
+            },
+            job: {
+              id: 'import-job-1',
+              source_type: 'website',
+              source_url: 'https://example.com/imported',
+              status: 'completed',
+              started_at: new Date('2026-07-03T00:00:00.000Z').toISOString(),
+              completed_at: new Date('2026-07-03T00:00:01.000Z').toISOString(),
+              output_document_id: 'source-2',
+              diagnostics: [],
+            },
+          }),
+        });
+      }
+
       // Chapter content
       if (method === 'GET' && pathname.startsWith(`/api/session/${MOCK_SESSION_ID}/chapter/`)) {
         const chId = pathname.split('/').pop();
@@ -98,9 +148,12 @@ async function installExportMocks(page: Page) {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
+            job_id: 'export-job-typst-chapter',
             filename: 'Intro.typ',
             typst_source: '#set page()\n= Intro\nWelcome to Python.',
             checksum: 'abc123',
+            compiled: false,
+            diagnostics: [],
           }),
         });
       }
@@ -111,9 +164,12 @@ async function installExportMocks(page: Page) {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
+            job_id: 'export-job-typst-curriculum',
             filename: 'Python_Course.typ',
             typst_source: '#set page()\n= Python Course',
             checksum: 'def456',
+            compiled: false,
+            diagnostics: [],
           }),
         });
       }
@@ -123,7 +179,7 @@ async function installExportMocks(page: Page) {
         const sseBody = [
           { event: 'status', data: { state: 'rendering', message: 'Rendering chapter to Typst...' } },
           { event: 'status', data: { state: 'compiling', message: 'Compiling Typst to PDF...' } },
-          { event: 'done', data: { result: { filename: 'Intro.pdf', pdf_base64: MOCK_PDF_BASE64, checksum: 'pdf123', size_bytes: 100, page_count: 1 } } },
+          { event: 'done', data: { result: { job_id: 'export-job-pdf-chapter', filename: 'Intro.pdf', pdf_base64: MOCK_PDF_BASE64, checksum: 'pdf123', size_bytes: 100, page_count: 1, compiled: true, diagnostics: [] } } },
         ].map(e => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`).join('');
 
         return route.fulfill({
@@ -138,7 +194,7 @@ async function installExportMocks(page: Page) {
         const sseBody = [
           { event: 'status', data: { state: 'rendering', message: 'Rendering curriculum to Typst...' } },
           { event: 'status', data: { state: 'compiling', message: 'Compiling Typst to PDF...' } },
-          { event: 'done', data: { result: { filename: 'Python_Course.pdf', pdf_base64: MOCK_PDF_BASE64, checksum: 'pdf456', size_bytes: 200, page_count: 2 } } },
+          { event: 'done', data: { result: { job_id: 'export-job-pdf-curriculum', filename: 'Python_Course.pdf', pdf_base64: MOCK_PDF_BASE64, checksum: 'pdf456', size_bytes: 200, page_count: 2, compiled: true, diagnostics: [] } } },
         ].map(e => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`).join('');
 
         return route.fulfill({
@@ -183,6 +239,32 @@ test.describe('Export flow (mocked API)', () => {
     // Export button should be in the sidebar (use .first() — there are now two buttons)
     const exportBtn = page.locator('.export-button').first();
     await expect(exportBtn).toBeVisible({ timeout: 15000 });
+  });
+
+  test('materials panel lists sources and imports a website', async ({ page }) => {
+    await installExportMocks(page);
+
+    await page.addInitScript(() => {
+      const planId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+      localStorage.setItem('blup_plans', JSON.stringify([{
+        id: planId, title: 'Learn Python', domain: 'programming',
+        state: 'CHAPTER_LEARNING', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      }]));
+      localStorage.setItem('blup_active_plan_id', planId);
+      localStorage.setItem('blup_current_chapter_id', 'ch1');
+    });
+
+    await page.goto('/');
+
+    await expect(page.getByRole('heading', { name: 'Materials' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Python Tutorial')).toBeVisible();
+    await expect(page.getByText(/website \| 3 chunks \| abcdef1234/)).toBeVisible();
+
+    const urlInput = page.getByLabel('Website URL');
+    await urlInput.fill('https://example.com/imported');
+    await page.getByRole('button', { name: 'Import' }).click();
+
+    await expect(urlInput).toHaveValue('');
   });
 
   test('clicking export button opens dropdown with PDF and Typst options', async ({ page }) => {

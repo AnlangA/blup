@@ -32,6 +32,8 @@ import type {
   ExportResult,
   InteractiveStartResponse,
   SandboxExecuteRequest,
+  SourceSummary,
+  WebsiteImportResponse,
 } from "../api/client";
 import { useSessionStore } from "../state/sessionStore";
 
@@ -378,6 +380,28 @@ export function useCompleteChapter(sessionId: string | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    },
+  });
+}
+
+// ── Materials ──
+
+export function useSources(sessionId: string | null) {
+  return useQuery<SourceSummary[]>({
+    queryKey: ["sources", sessionId],
+    queryFn: () => api.listSources(sessionId!),
+    enabled: !!sessionId,
+    staleTime: 60_000,
+  });
+}
+
+export function useImportWebsite(sessionId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation<WebsiteImportResponse, Error, string>({
+    mutationFn: (url: string) => api.importWebsite(sessionId!, { url }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sources", sessionId] });
     },
   });
 }
