@@ -23,9 +23,9 @@ async fn main() -> anyhow::Result<()> {
         host = %config.host,
         port = %config.port,
         model = %config.llm_model,
-        prompts_dir = %config.prompts_dir.display(),
-        schemas_dir = %config.schemas_dir.display(),
-        data_dir = %config.data_dir.display(),
+        has_prompts = !config.prompts_dir.as_os_str().is_empty(),
+        has_schemas = !config.schemas_dir.as_os_str().is_empty(),
+        has_data_dir = !config.data_dir.as_os_str().is_empty(),
         max_sessions = config.max_sessions,
         session_ttl_hours = config.session_ttl_hours,
         "Starting agent-core"
@@ -65,9 +65,6 @@ async fn main() -> anyhow::Result<()> {
         .run_migrations()
         .await
         .expect("Failed to run storage migrations");
-
-    // Initialize assessment engine
-    let assessment = assessment_engine::AssessmentEngine::new();
 
     // Initialize content pipeline
     let content_pipeline = Arc::new(content_pipeline::ContentPipeline::new());
@@ -112,6 +109,11 @@ async fn main() -> anyhow::Result<()> {
         let sandbox_config = sandbox_manager::SandboxConfig::default();
         Arc::new(sandbox_manager::SandboxManager::new(sandbox_config))
     };
+
+    // Initialize assessment engine with sandbox-backed code execution.
+    let assessment = assessment_engine::AssessmentEngine::new().with_executor(Arc::new(
+        agent_core::tool_adapters::SandboxCodeExecutor::new(sandbox_manager.clone()),
+    ));
 
     let app_state = AppState {
         config: Arc::new(config.clone()),

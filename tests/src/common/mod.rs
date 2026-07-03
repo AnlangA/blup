@@ -211,12 +211,22 @@ impl TestHarness {
         self.request("DELETE", path, None).await
     }
 
+    pub async fn post_empty(&self, path: &str) -> (u16, serde_json::Value) {
+        self.request("POST", path, None).await
+    }
+
     /// Create a new reqwest client configured for test use (no proxy).
     pub fn http_client() -> reqwest::Client {
         reqwest::Client::builder()
             .no_proxy()
             .build()
             .expect("Failed to build HTTP client")
+    }
+
+    /// Create a new session and return its ID as a string.
+    pub async fn create_session(&self) -> String {
+        let (_, body) = self.post("/api/session", None).await;
+        body["session_id"].as_str().unwrap().to_string()
     }
 
     /// Submit 3 profile answers to complete the profile collection flow.

@@ -2,6 +2,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use tokio::time::timeout;
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::config::SandboxConfig;
@@ -25,6 +26,15 @@ impl ContainerExecutor {
         let image = request.tool_kind.to_image();
         let total_timeout = Duration::from_secs(
             request.limits.compile_timeout_secs + request.limits.run_timeout_secs,
+        );
+
+        info!(
+            request_id = %request.request_id,
+            session_id = %request.session_id,
+            language = ?request.tool_kind,
+            container = %container_name,
+            timeout_secs = total_timeout.as_secs(),
+            "Starting sandbox execution"
         );
 
         // Typst needs more PIDs for rayon parallelism
@@ -137,14 +147,29 @@ impl ContainerExecutor {
         match result {
             Ok(Ok(output)) => {
                 let duration_ms = start.elapsed().as_millis() as u64;
+                debug!(
+                    request_id = %request.request_id,
+                    duration_ms,
+                    exit_code = ?output.status.code(),
+                    "Sandbox process completed"
+                );
 
                 // Inspect container to capture resource usage before removing
-                let resource_usage = self.inspect_container(&container_name);
+                let container_name_clone = container_name.clone();
+                let resource_usage =
+                    tokio::task::spawn_blocking(move || inspect_container(&container_name_clone))
+                        .await
+                        .unwrap_or(ResourceUsage::default());
 
                 // Clean up container
-                self.force_remove_container(&container_name);
+                let container_name_clone = container_name.clone();
+                tokio::task::spawn_blocking(move || {
+                    force_remove_container(&container_name_clone);
+                })
+                .await
+                .unwrap_or(());
 
-                self.parse_output(
+                parse_output(
                     request.request_id,
                     output,
                     &request,
@@ -153,21 +178,51 @@ impl ContainerExecutor {
                 )
             }
             Ok(Err(e)) => {
-                self.force_remove_container(&container_name);
+                warn!(
+                    request_id = %request.request_id,
+                    error = %e,
+                    "Sandbox execution failed"
+                );
+                let container_name_clone = container_name.clone();
+                tokio::task::spawn_blocking(move || {
+                    force_remove_container(&container_name_clone);
+                })
+                .await
+                .unwrap_or(());
                 Err(e)
             }
             Err(_elapsed) => {
+                warn!(
+                    request_id = %request.request_id,
+                    timeout_secs = total_timeout.as_secs(),
+                    "Sandbox execution timed out"
+                );
                 // Timeout - force kill, then inspect before removing
-                let _ = Command::new("docker")
-                    .args(["kill", "--signal=SIGKILL", &container_name])
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status();
+                let container_name_clone = container_name.clone();
+                tokio::task::spawn_blocking(move || {
+                    let _ = Command::new("docker")
+                        .args(["kill", "--signal=SIGKILL", &container_name_clone])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status();
+                })
+                .await
+                .unwrap_or(());
 
-                std::thread::sleep(Duration::from_millis(500));
+                tokio::time::sleep(Duration::from_millis(500)).await;
 
-                let resource_usage = self.inspect_container(&container_name);
-                self.force_remove_container(&container_name);
+                let resource_usage = {
+                    let container_name_clone = container_name.clone();
+                    tokio::task::spawn_blocking(move || inspect_container(&container_name_clone))
+                        .await
+                        .unwrap_or(ResourceUsage::default())
+                };
+                let container_name_clone = container_name.clone();
+                tokio::task::spawn_blocking(move || {
+                    force_remove_container(&container_name_clone);
+                })
+                .await
+                .unwrap_or(());
 
                 Ok(SandboxResult {
                     request_id: request.request_id,
@@ -188,137 +243,140 @@ impl ContainerExecutor {
             }
         }
     }
+}
 
-    /// Inspect a container with `docker inspect` to extract resource usage metrics.
-    fn inspect_container(&self, name: &str) -> ResourceUsage {
-        // Safely read OOMKilled from docker inspect
-        let _oom_killed = Command::new("docker")
-            .args(["inspect", "--format", "{{json .State}}", name])
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("OOMKilled").and_then(|v| v.as_bool()))
-            .unwrap_or(false);
+/// Inspect a container with `docker inspect` to extract resource usage metrics.
+fn inspect_container(name: &str) -> ResourceUsage {
+    // Read OOMKilled from docker inspect state
+    let oom_killed = Command::new("docker")
+        .args(["inspect", "--format", "{{json .State}}", name])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v.get("OOMKilled").and_then(|v| v.as_bool()))
+        .unwrap_or(false);
 
-        // Try to get memory stats from docker stats (one-shot)
-        let stats = Command::new("docker")
-            .args(["stats", "--no-stream", "--format", "{{json .}}", name])
-            .output();
+    // Try to get memory stats from docker stats (one-shot)
+    let stats = Command::new("docker")
+        .args(["stats", "--no-stream", "--format", "{{json .}}", name])
+        .output();
 
-        let (peak_memory_mb, cpu_time_ms) = stats
-            .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .map(|v| {
-                let mem_str = v
-                    .get("MemUsage")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("0MiB / 0MiB");
-                // Parse "12.5MiB / 256MiB" → peak in MB
-                let mem_mb = mem_str
-                    .split(" / ")
-                    .next()
-                    .and_then(|used| {
-                        let used = used.trim();
-                        if used.ends_with("GiB") {
-                            used.trim_end_matches("GiB")
-                                .trim()
-                                .parse::<f64>()
-                                .ok()
-                                .map(|v| v * 1024.0)
-                        } else if used.ends_with("MiB") {
-                            used.trim_end_matches("MiB").trim().parse::<f64>().ok()
-                        } else if used.ends_with("KiB") {
-                            used.trim_end_matches("KiB")
-                                .trim()
-                                .parse::<f64>()
-                                .ok()
-                                .map(|v| v / 1024.0)
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or(0.0);
+    let (peak_memory_mb, cpu_time_ms) = stats
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .map(|v| {
+            let mem_str = v
+                .get("MemUsage")
+                .and_then(|v| v.as_str())
+                .unwrap_or("0MiB / 0MiB");
+            // Parse "12.5MiB / 256MiB" → peak in MB
+            let mem_mb = mem_str
+                .split(" / ")
+                .next()
+                .and_then(|used| {
+                    let used = used.trim();
+                    if used.ends_with("GiB") {
+                        used.trim_end_matches("GiB")
+                            .trim()
+                            .parse::<f64>()
+                            .ok()
+                            .map(|v| v * 1024.0)
+                    } else if used.ends_with("MiB") {
+                        used.trim_end_matches("MiB").trim().parse::<f64>().ok()
+                    } else if used.ends_with("KiB") {
+                        used.trim_end_matches("KiB")
+                            .trim()
+                            .parse::<f64>()
+                            .ok()
+                            .map(|v| v / 1024.0)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0.0);
 
-                let cpu_str = v.get("CPUPerc").and_then(|v| v.as_str()).unwrap_or("0.00%");
-                let cpu_pct = cpu_str
-                    .trim_end_matches('%')
-                    .trim()
-                    .parse::<f64>()
-                    .unwrap_or(0.0);
+            let cpu_str = v.get("CPUPerc").and_then(|v| v.as_str()).unwrap_or("0.00%");
+            let cpu_pct = cpu_str
+                .trim_end_matches('%')
+                .trim()
+                .parse::<f64>()
+                .unwrap_or(0.0);
 
-                (mem_mb, (cpu_pct * 10.0) as u64)
-            })
-            .unwrap_or((0.0, 0));
-
-        ResourceUsage {
-            peak_memory_mb,
-            cpu_time_ms,
-            disk_used_kb: 0,
-        }
-    }
-
-    fn parse_output(
-        &self,
-        request_id: Uuid,
-        output: std::process::Output,
-        request: &SandboxRequest,
-        duration_ms: u64,
-        resource_usage: ResourceUsage,
-    ) -> Result<SandboxResult, SandboxError> {
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let exit_code = output.status.code();
-
-        // Truncate output if too large (64KB)
-        let max_size = 64 * 1024;
-        let (stdout, stdout_truncated) = if stdout.len() > max_size {
-            (stdout[..max_size].to_string(), true)
-        } else {
-            (stdout, false)
-        };
-        let (stderr, stderr_truncated) = if stderr.len() > max_size {
-            (stderr[..max_size].to_string(), true)
-        } else {
-            (stderr, false)
-        };
-
-        // Determine status: prioritize resource limit signals over exit code
-        let status = match exit_code {
-            Some(0) => ExecutionStatus::Success,
-            Some(137) => {
-                // SIGKILL (137 = 128 + 9) — typically OOM or timeout signal
-                if resource_usage.peak_memory_mb >= request.limits.memory_mb as f64 {
-                    ExecutionStatus::MemoryExceeded
-                } else {
-                    ExecutionStatus::NonZeroExit
-                }
-            }
-            Some(_code) => ExecutionStatus::NonZeroExit,
-            None => ExecutionStatus::InternalError,
-        };
-
-        Ok(SandboxResult {
-            request_id,
-            session_id: Some(request.session_id),
-            status,
-            exit_code,
-            stdout,
-            stderr,
-            stdout_truncated,
-            stderr_truncated,
-            duration_ms,
-            resource_usage,
-            error: None,
+            (mem_mb, (cpu_pct * 10.0) as u64)
         })
-    }
+        .unwrap_or((0.0, 0));
 
-    fn force_remove_container(&self, name: &str) {
-        let _ = Command::new("docker")
-            .args(["rm", "-f", name])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
+    ResourceUsage {
+        peak_memory_mb,
+        cpu_time_ms,
+        disk_used_kb: 0,
+        oom_killed,
     }
+}
+
+fn parse_output(
+    request_id: Uuid,
+    output: std::process::Output,
+    request: &SandboxRequest,
+    duration_ms: u64,
+    resource_usage: ResourceUsage,
+) -> Result<SandboxResult, SandboxError> {
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let exit_code = output.status.code();
+
+    // Truncate output if too large (64KB)
+    let max_size = 64 * 1024;
+    let (stdout, stdout_truncated) = if stdout.len() > max_size {
+        (stdout[..max_size].to_string(), true)
+    } else {
+        (stdout, false)
+    };
+    let (stderr, stderr_truncated) = if stderr.len() > max_size {
+        (stderr[..max_size].to_string(), true)
+    } else {
+        (stderr, false)
+    };
+
+    // Determine status: prioritize resource limit signals over exit code
+    let status = match exit_code {
+        Some(0) => ExecutionStatus::Success,
+        Some(137) => {
+            // SIGKILL (137 = 128 + 9) — OOM or timeout signal.
+            // Prefer docker's own OOMKilled flag; fall back to peak memory heuristic.
+            if resource_usage.oom_killed
+                || resource_usage.peak_memory_mb >= request.limits.memory_mb as f64
+            {
+                ExecutionStatus::MemoryExceeded
+            } else {
+                ExecutionStatus::NonZeroExit
+            }
+        }
+        Some(_code) => ExecutionStatus::NonZeroExit,
+        None => ExecutionStatus::InternalError,
+    };
+
+    Ok(SandboxResult {
+        request_id,
+        session_id: Some(request.session_id),
+        status,
+        exit_code,
+        stdout,
+        stderr,
+        stdout_truncated,
+        stderr_truncated,
+        duration_ms,
+        resource_usage,
+        error: None,
+    })
+}
+
+fn force_remove_container(name: &str) {
+    let _ = Command::new("docker")
+        .args(["rm", "-f", name])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
 }

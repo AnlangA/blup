@@ -315,13 +315,17 @@ fn test_short_answer_unicode_content() {
 }
 
 #[test]
-fn test_coding_no_test_cases_gives_full_score() {
+fn test_coding_no_test_cases_is_not_auto_correct() {
     let engine = AssessmentEngine::new();
     let exercise = Exercise::new_coding("ch1", "Write a function", "python", vec![], 2.0);
 
     let answer = json!({"code": "def foo():\n    pass"});
     let result = engine.evaluate(&exercise, &answer).unwrap();
-    assert_eq!(result.score, 2.0);
+    assert_eq!(result.score, 0.0);
+    assert!(!result.is_correct);
+    assert!(result
+        .feedback
+        .contains("cannot be evaluated deterministically"));
 }
 
 #[test]

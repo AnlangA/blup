@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Minimum score ratio (0.0–1.0) to consider an answer correct.
+const CORRECTNESS_THRESHOLD: f64 = 0.7;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Evaluation {
     pub exercise_id: Uuid,
@@ -28,7 +31,7 @@ impl Evaluation {
         max_score: f64,
         feedback: String,
     ) -> Self {
-        let is_correct = score >= max_score * 0.7; // 70% threshold
+        let is_correct = score >= max_score * CORRECTNESS_THRESHOLD;
         Self {
             exercise_id,
             learner_answer,

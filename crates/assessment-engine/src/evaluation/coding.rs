@@ -25,6 +25,16 @@ pub fn evaluate(
         ));
     }
 
+    if test_cases.is_empty() {
+        return Ok(Evaluation::new(
+            exercise.id,
+            answer.clone(),
+            0.0,
+            exercise.max_score,
+            "This coding exercise has no test cases, so the submission cannot be evaluated deterministically.".to_string(),
+        ));
+    }
+
     // Use sandbox executor when available, otherwise fall back to simulation.
     // Note: real execution via executor requires an async runtime context;
     // the sync evaluate() method uses simulation. Callers in async handlers
@@ -33,7 +43,7 @@ pub fn evaluate(
     let (passed_tests, total_tests) = simulate_test_execution(code, test_cases, language);
 
     let score = if total_tests == 0 {
-        exercise.max_score
+        0.0
     } else {
         (passed_tests as f64 / total_tests as f64) * exercise.max_score
     };
@@ -53,6 +63,97 @@ pub fn evaluate(
                 "Some test cases failed. Check the edge cases."
             }
         )
+    };
+
+    Ok(Evaluation::new(
+        exercise.id,
+        answer.clone(),
+        score,
+        exercise.max_score,
+        feedback,
+    ))
+}
+
+pub async fn evaluate_async(
+    exercise: &Exercise,
+    answer: &serde_json::Value,
+    language: &str,
+    test_cases: &[TestCase],
+    executor: Option<&dyn CodeExecutor>,
+) -> Result<Evaluation, AssessmentError> {
+    let code = answer
+        .get("code")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AssessmentError::InvalidAnswer("Missing 'code' field".to_string()))?;
+
+    if code.is_empty() {
+        return Ok(Evaluation::new(
+            exercise.id,
+            answer.clone(),
+            0.0,
+            exercise.max_score,
+            "No code submitted.".to_string(),
+        ));
+    }
+
+    if test_cases.is_empty() {
+        return Ok(Evaluation::new(
+            exercise.id,
+            answer.clone(),
+            0.0,
+            exercise.max_score,
+            "This coding exercise has no test cases, so the submission cannot be evaluated deterministically.".to_string(),
+        ));
+    }
+
+    let Some(executor) = executor else {
+        return evaluate(exercise, answer, language, test_cases, None);
+    };
+
+    let mut passed_tests = 0usize;
+    let mut first_failure: Option<String> = None;
+
+    for (index, test_case) in test_cases.iter().enumerate() {
+        let result = executor
+            .execute(code, language, &test_case.input)
+            .await
+            .map_err(AssessmentError::EvaluationError)?;
+
+        let actual = result.stdout.trim();
+        let expected = test_case.expected_output.trim();
+        if result.success && actual == expected {
+            passed_tests += 1;
+            continue;
+        }
+
+        if first_failure.is_none() {
+            let detail = if !result.success {
+                format!(
+                    "Test {} failed during execution (exit code {:?}). {}",
+                    index + 1,
+                    result.exit_code,
+                    result.stderr.trim()
+                )
+            } else {
+                format!(
+                    "Test {} expected {:?}, got {:?}.",
+                    index + 1,
+                    expected,
+                    actual
+                )
+            };
+            first_failure = Some(detail);
+        }
+    }
+
+    let total_tests = test_cases.len();
+    let score = (passed_tests as f64 / total_tests as f64) * exercise.max_score;
+    let is_correct = passed_tests == total_tests;
+    let feedback = if is_correct {
+        "All test cases passed in the sandbox. Great job!".to_string()
+    } else {
+        let detail = first_failure.unwrap_or_else(|| "Check the failing test cases.".to_string());
+        format!("{passed_tests} of {total_tests} test cases passed. {detail}")
     };
 
     Ok(Evaluation::new(
@@ -105,7 +206,29 @@ fn simulate_test_execution(code: &str, test_cases: &[TestCase], _language: &str)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::executor::CodeExecutionResult;
     use crate::models::exercise::Exercise;
+    use async_trait::async_trait;
+
+    struct EchoExecutor;
+
+    #[async_trait]
+    impl CodeExecutor for EchoExecutor {
+        async fn execute(
+            &self,
+            _code: &str,
+            _language: &str,
+            stdin: &str,
+        ) -> Result<CodeExecutionResult, String> {
+            Ok(CodeExecutionResult {
+                success: true,
+                stdout: stdin.to_string(),
+                stderr: String::new(),
+                exit_code: Some(0),
+                duration_ms: 1,
+            })
+        }
+    }
 
     #[test]
     fn test_valid_code() {
@@ -180,5 +303,67 @@ mod tests {
         let result = evaluate(&exercise, &answer, "python", &[], None);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_test_cases_is_not_auto_correct() {
+        let exercise = Exercise::new_coding(
+            "ch1",
+            "Write a function to add two numbers",
+            "python",
+            vec![],
+            1.0,
+        );
+
+        let answer = serde_json::json!({
+            "code": "def add(a, b):\n    return a + b"
+        });
+
+        let result = evaluate(&exercise, &answer, "python", &[], None).unwrap();
+
+        assert_eq!(result.score, 0.0);
+        assert!(!result.is_correct);
+        assert!(result
+            .feedback
+            .contains("cannot be evaluated deterministically"));
+    }
+
+    #[tokio::test]
+    async fn test_async_evaluation_uses_executor() {
+        let exercise = Exercise::new_coding(
+            "ch1",
+            "Echo stdin",
+            "python",
+            vec![
+                TestCase {
+                    input: "hello".to_string(),
+                    expected_output: "hello".to_string(),
+                },
+                TestCase {
+                    input: "world".to_string(),
+                    expected_output: "world".to_string(),
+                },
+            ],
+            2.0,
+        );
+
+        let answer = serde_json::json!({
+            "code": "print(input())"
+        });
+
+        let executor = EchoExecutor;
+        let result = evaluate_async(
+            &exercise,
+            &answer,
+            "python",
+            &exercise.exercise_type.test_cases(),
+            Some(&executor),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.score, 2.0);
+        assert!(result.is_correct);
+        assert!(result.feedback.contains("sandbox"));
     }
 }

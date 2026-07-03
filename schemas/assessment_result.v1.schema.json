@@ -1,7 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "assessment_result.v1.schema.json",
+  "$id": "https://blup.dev/schemas/assessment_result.v1.schema.json",
   "title": "AssessmentResult",
+  "version": "1.0.0",
   "description": "Result of evaluating a learner's answer to an exercise",
   "type": "object",
   "required": ["exercise_id", "learner_answer", "score", "max_score", "feedback", "is_correct"],

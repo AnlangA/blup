@@ -22,8 +22,14 @@ export function LearningLayout() {
   const { data: cachedChapter, isLoading: cacheLoading } = useChapter(
     sessionId,
     currentChapterId,
+    { enabled: false },
   );
-  const streamState = useStreamChapter(sessionId, currentChapterId);
+  const hasCachedContent = Boolean(cachedChapter?.content);
+  const streamState = useStreamChapter(
+    sessionId,
+    currentChapterId,
+    { enabled: !hasCachedContent },
+  );
 
   // Prefer streamed content, fall back to cached
   const chapterContent = streamState.content ?? cachedChapter?.content ?? null;
@@ -82,17 +88,7 @@ export function LearningLayout() {
       <div className="resize-handle" onMouseDown={onResizeStart("sidebar")} />
       <main className="chapter-content">
         {currentChapterId ? (
-          isLoading ? (
-            <div className="welcome-content">
-              <p>Loading chapter content...</p>
-            </div>
-          ) : streamState.error ? (
-            <div className="welcome-content">
-              <p style={{ color: "var(--color-error)" }}>
-                Failed to load chapter: {streamState.error}
-              </p>
-            </div>
-          ) : chapterContent ? (
+          chapterContent ? (
             <>
               {streamState.isStreaming && !cachedChapter?.content && (
                 <div className="streaming-indicator">Streaming...</div>
@@ -102,6 +98,16 @@ export function LearningLayout() {
               </div>
               <MarkdownRenderer content={chapterContent} />
             </>
+          ) : isLoading ? (
+            <div className="welcome-content">
+              <p>Loading chapter content...</p>
+            </div>
+          ) : streamState.error ? (
+            <div className="welcome-content">
+              <p style={{ color: "var(--color-error)" }}>
+                Failed to load chapter: {streamState.error}
+              </p>
+            </div>
           ) : (
             <div className="welcome-content">
               <p>Loading chapter content...</p>

@@ -114,6 +114,7 @@ async fn test_python_memory_limit() {
             peak_memory_mb: 1024.0,
             cpu_time_ms: 0,
             disk_used_kb: 0,
+            oom_killed: true,
         },
         error: Some(ErrorDetails {
             code: "MEMORY_EXCEEDED".to_string(),

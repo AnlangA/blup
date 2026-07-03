@@ -23,6 +23,7 @@ pub struct ResourceUsage {
     pub peak_memory_mb: f64,
     pub cpu_time_ms: u64,
     pub disk_used_kb: u64,
+    pub oom_killed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +98,7 @@ impl Default for ResourceUsage {
             peak_memory_mb: 0.0,
             cpu_time_ms: 0,
             disk_used_kb: 0,
+            oom_killed: false,
         }
     }
 }

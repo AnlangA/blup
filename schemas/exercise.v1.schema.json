@@ -1,7 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "exercise.v1.schema.json",
+  "$id": "https://blup.dev/schemas/exercise.v1.schema.json",
   "title": "Exercise",
+  "version": "1.0.0",
   "description": "An exercise generated for learner assessment",
   "type": "object",
   "required": ["id", "chapter_id", "question", "exercise_type", "difficulty", "max_score"],

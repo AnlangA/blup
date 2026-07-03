@@ -49,6 +49,15 @@ fn main() {
             }
         };
 
+        let metadata_errors = schema_metadata_errors(name, &schema_json);
+        if !metadata_errors.is_empty() {
+            for error in metadata_errors {
+                eprintln!("  FAIL {name}: {error}");
+                errors += 1;
+            }
+            continue;
+        }
+
         let validator = match jsonschema::Validator::options()
             .with_draft(jsonschema::Draft::Draft202012)
             .build(&schema_json)
@@ -117,4 +126,31 @@ fn main() {
     } else {
         println!("All schemas and fixtures valid.");
     }
+}
+
+fn schema_metadata_errors(file_name: &str, schema: &serde_json::Value) -> Vec<String> {
+    let mut errors = Vec::new();
+    let expected_id = format!("https://blup.dev/schemas/{file_name}");
+
+    match schema.get("$id").and_then(|value| value.as_str()) {
+        Some(actual) if actual == expected_id => {}
+        Some(actual) => errors.push(format!("$id must be {expected_id}, got {actual}")),
+        None => errors.push("missing string $id".to_string()),
+    }
+
+    match schema.get("version").and_then(|value| value.as_str()) {
+        Some(version) if is_semverish(version) => {}
+        Some(version) => errors.push(format!("version must look like x.y.z, got {version}")),
+        None => errors.push("missing string version".to_string()),
+    }
+
+    errors
+}
+
+fn is_semverish(version: &str) -> bool {
+    let parts: Vec<&str> = version.split('.').collect();
+    parts.len() == 3
+        && parts
+            .iter()
+            .all(|part| !part.is_empty() && part.chars().all(|ch| ch.is_ascii_digit()))
 }

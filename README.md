@@ -4,13 +4,13 @@ Blup is an AI interactive learning-agent platform. A learner enters a goal, the 
 
 ## Current Status
 
-Phase 1 (single-user web learning assistant MVP) is complete. The next target is **Phase 2: exercises, assessment, sandboxed execution, and persistence**.
+Phase 0, Phase 1, and Phase 2 are complete in the codebase. The current target is **Phase 2.5: desktop packaging, source import, and Typst/PDF export hardening**.
 
 | Phase | Goal | Status |
 | --- | --- | --- |
 | Phase 0 | Repository foundation, validation, scripts, observability policy | Complete |
 | Phase 1 | Web learning assistant: goal feasibility → profile → curriculum → chapter teaching | Complete |
-| Phase 2 | Exercises, assessment, sandboxed execution, persistence | Planned |
+| Phase 2 | Exercises, assessment, sandboxed execution, persistence | Complete |
 | Phase 2.5 | Desktop packaging, source import, Typst/PDF export | Planned |
 | Phase 3 | Plugin system and Bevy interactive scenes | Planned |
 
@@ -35,7 +35,7 @@ blup/
 - LLMs explain, plan, and tutor; they do not fake deterministic execution.
 - Structured schemas define contracts between modules.
 - User code execution, math calculation, document compilation, and imports must use real tools with validation and logs.
-- Phase 1 intentionally excludes Tauri, Bevy, WASM plugins, Docker sandboxes, and real code execution.
+- Tauri, imports, export, and Docker sandbox execution are Phase 2+ capabilities and must stay behind backend/tool boundaries.
 
 See [`AGENTS.md`](./AGENTS.md) for the canonical implementation plan and agent instructions.
 
