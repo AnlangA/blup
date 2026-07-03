@@ -1,7 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "sandbox_request.v1.schema.json",
+  "$id": "https://blup.dev/schemas/sandbox_request.v1.schema.json",
   "title": "SandboxRequest",
+  "version": "1.0.0",
   "description": "Request to execute code in a sandboxed environment",
   "type": "object",
   "required": ["request_id", "session_id", "tool_kind", "code"],

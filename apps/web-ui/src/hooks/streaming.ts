@@ -1,5 +1,7 @@
 import { useReducer, useState, useEffect, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { SSEClient } from '../api/sse';
+import type { ChapterContent } from '../api/client';
 
 interface StreamState {
   content: string | null;
@@ -36,7 +38,9 @@ function streamReducer(state: StreamState, action: StreamAction): StreamState {
 export function useStreamChapter(
   sessionId: string | null,
   chapterId: string | null,
+  options?: { enabled?: boolean },
 ): StreamState {
+  const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(streamReducer, {
     content: null,
     isStreaming: false,
@@ -46,7 +50,7 @@ export function useStreamChapter(
   const sseRef = useRef(new SSEClient());
 
   useEffect(() => {
-    if (!sessionId || !chapterId) return;
+    if (!sessionId || !chapterId || options?.enabled === false) return;
 
     dispatch({ type: 'reset' });
     const url = `/api/session/${sessionId}/chapter/${chapterId}/stream`;
@@ -62,6 +66,17 @@ export function useStreamChapter(
           typeof (result as { content?: unknown }).content === 'string'
             ? (result as { content: string }).content
             : null;
+        if (content) {
+          queryClient.setQueryData<ChapterContent>(
+            ['chapter', sessionId, chapterId],
+            {
+              id: chapterId,
+              role: 'assistant',
+              content,
+              timestamp: new Date().toISOString(),
+            },
+          );
+        }
         client.close();
         dispatch({ type: 'done', content });
       },
@@ -74,7 +89,7 @@ export function useStreamChapter(
     return () => {
       client.close();
     };
-  }, [sessionId, chapterId]);
+  }, [sessionId, chapterId, queryClient, options?.enabled]);
 
   return state;
 }

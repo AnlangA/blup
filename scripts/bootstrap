@@ -9,8 +9,30 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/lib/colors.sh"
 . "$SCRIPT_DIR/lib/checks.sh"
 
-PHASE="${1:-phase1}"
+PHASE="phase1"
 ERRORS=0
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --phase)
+            if [ -z "${2:-}" ]; then
+                fail "--phase requires a value"
+                exit 1
+            fi
+            PHASE="$2"
+            shift 2
+            ;;
+        phase1|phase2|phase2.5|phase3)
+            PHASE="$1"
+            shift
+            ;;
+        *)
+            fail "Unknown argument: $1"
+            echo "Usage: ./scripts/bootstrap [--phase phase1|phase2|phase2.5|phase3]"
+            exit 1
+            ;;
+    esac
+done
 
 echo "=== Blup Bootstrap ==="
 echo "Checking tools for: $PHASE"

@@ -7,7 +7,6 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import remarkRehype from 'remark-rehype';
 import rehypeKatex from 'rehype-katex';
-import rehypeRaw from 'rehype-raw';
 import rehypeExpressiveCode from 'rehype-expressive-code';
 import rehypeStringify from 'rehype-stringify';
 import type { PluggableList } from 'unified';
@@ -18,7 +17,6 @@ const CACHE_MAX = 20;
 const renderCache = new Map<string, string>();
 
 const rehypePlugins: PluggableList = [
-  [rehypeRaw],
   [rehypeKatex],
   [rehypeExpressiveCode],
   [rehypeStringify],
@@ -32,7 +30,7 @@ async function renderMarkdown(content: string): Promise<string> {
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMath)
-    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(remarkRehype)
     .use(rehypePlugins)
     .process(content);
 
@@ -45,16 +43,6 @@ async function renderMarkdown(content: string): Promise<string> {
   renderCache.set(content, result);
 
   return result;
-}
-
-function executeScripts(container: HTMLElement) {
-  const scripts = container.querySelectorAll('script[type="module"]');
-  scripts.forEach((oldScript) => {
-    const newScript = document.createElement('script');
-    newScript.type = 'module';
-    newScript.textContent = oldScript.textContent;
-    oldScript.replaceWith(newScript);
-  });
 }
 
 interface CodeBlock {
@@ -99,7 +87,6 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
 
   useEffect(() => {
     if (containerRef.current) {
-      executeScripts(containerRef.current);
       injectSandboxContainers(containerRef.current, setCodeBlocks, portalCleanupRef);
     }
     const cleanup = portalCleanupRef.current;

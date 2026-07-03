@@ -66,9 +66,6 @@ async fn main() -> anyhow::Result<()> {
         .await
         .expect("Failed to run storage migrations");
 
-    // Initialize assessment engine
-    let assessment = assessment_engine::AssessmentEngine::new();
-
     // Initialize content pipeline
     let content_pipeline = Arc::new(content_pipeline::ContentPipeline::new());
 
@@ -112,6 +109,11 @@ async fn main() -> anyhow::Result<()> {
         let sandbox_config = sandbox_manager::SandboxConfig::default();
         Arc::new(sandbox_manager::SandboxManager::new(sandbox_config))
     };
+
+    // Initialize assessment engine with sandbox-backed code execution.
+    let assessment = assessment_engine::AssessmentEngine::new().with_executor(Arc::new(
+        agent_core::tool_adapters::SandboxCodeExecutor::new(sandbox_manager.clone()),
+    ));
 
     let app_state = AppState {
         config: Arc::new(config.clone()),

@@ -1,10 +1,5 @@
-import { useEffect } from 'react';
 import { useSessionStore, CodeTheme } from '../../state/sessionStore';
-import {
-  useCurriculum,
-  useChapter,
-  usePrefetchChapters,
-} from '../../hooks/query';
+import { useCurriculum } from '../../hooks/query';
 import type { Chapter } from '../../api/client';
 import { ExportButton } from '../export/ExportButton';
 
@@ -22,15 +17,6 @@ export function CurriculumSidebar() {
   } = useCurriculum(sessionId);
 
   const chapters = curriculum?.chapters ?? [];
-  const chapterIds = chapters.map((c) => c.id);
-  const { prefetchAll } = usePrefetchChapters(sessionId, chapterIds);
-
-  // Prefetch all chapter content once curriculum is loaded
-  useEffect(() => {
-    if (chapterIds.length > 0) {
-      prefetchAll();
-    }
-  }, [chapterIds, prefetchAll]);
 
   const handleChapterClick = (ch: Chapter) => {
     setChapter(ch.id);
@@ -78,7 +64,6 @@ export function CurriculumSidebar() {
             <ChapterItem
               key={ch.id}
               chapter={ch}
-              sessionId={sessionId!}
               isActive={currentChapterId === ch.id}
               onClick={() => handleChapterClick(ch)}
             />
@@ -90,17 +75,13 @@ export function CurriculumSidebar() {
 
 function ChapterItem({
   chapter,
-  sessionId,
   isActive,
   onClick,
 }: {
   chapter: Chapter;
-  sessionId: string;
   isActive: boolean;
   onClick: () => void;
 }) {
-  const { isFetching, data } = useChapter(sessionId, chapter.id);
-
   return (
     <li
       className={isActive ? 'active' : ''}
@@ -110,12 +91,7 @@ function ChapterItem({
       onKeyDown={(e) => e.key === 'Enter' && onClick()}
     >
       <span className="chapter-order">{chapter.order}.</span>
-      <span className="chapter-title">
-        {chapter.title}
-        {isFetching && !data && (
-          <span className="chapter-loading-dot"> ⏳</span>
-        )}
-      </span>
+      <span className="chapter-title">{chapter.title}</span>
     </li>
   );
 }

@@ -61,6 +61,30 @@ impl AssessmentEngine {
             } => evaluation::reflection::evaluate(exercise, answer, *min_length, rubric_dimensions),
         }
     }
+
+    pub async fn evaluate_async(
+        &self,
+        exercise: &Exercise,
+        answer: &serde_json::Value,
+    ) -> Result<Evaluation, AssessmentError> {
+        match &exercise.exercise_type {
+            models::exercise::ExerciseType::Coding {
+                language,
+                test_cases,
+                starter_code: _,
+            } => {
+                evaluation::coding::evaluate_async(
+                    exercise,
+                    answer,
+                    language,
+                    test_cases,
+                    self.code_executor.as_deref(),
+                )
+                .await
+            }
+            _ => self.evaluate(exercise, answer),
+        }
+    }
 }
 
 impl Default for AssessmentEngine {

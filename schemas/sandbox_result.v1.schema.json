@@ -1,7 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "sandbox_result.v1.schema.json",
+  "$id": "https://blup.dev/schemas/sandbox_result.v1.schema.json",
   "title": "SandboxResult",
+  "version": "1.0.0",
   "description": "Result of executing code in a sandboxed environment",
   "type": "object",
   "required": ["request_id", "status", "exit_code", "stdout", "stderr", "stdout_truncated", "stderr_truncated", "duration_ms"],

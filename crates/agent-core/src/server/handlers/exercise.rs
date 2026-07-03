@@ -111,7 +111,8 @@ pub async fn submit_exercise(
 
     let evaluation = state
         .assessment
-        .evaluate(&assessment_exercise, &submission.answer)
+        .evaluate_async(&assessment_exercise, &submission.answer)
+        .await
         .map_err(|e| ApiError::Internal(format!("Assessment evaluation failed: {e}")))?;
 
     let evaluation_value = serde_json::to_value(&evaluation)

@@ -9,18 +9,31 @@ use crate::models::document_artifact::DocumentArtifact;
 
 pub struct TypstCompiler {
     sandbox: Arc<SandboxManager>,
+    allow_host_cli_fallback: bool,
 }
 
 impl TypstCompiler {
     pub fn new(sandbox: Arc<SandboxManager>) -> Self {
-        Self { sandbox }
+        Self {
+            sandbox,
+            allow_host_cli_fallback: false,
+        }
     }
 
-    /// Compile Typst source to PDF via sandbox, with CLI fallback.
+    /// Allow falling back to the host `typst` CLI when sandbox compilation fails.
     ///
-    /// Tries Docker sandbox first. If the sandbox is unavailable or compilation
-    /// fails, falls back to the host `typst` CLI. Returns `DocumentArtifact` on
-    /// success.
+    /// This is intended for explicit developer tooling only. Product export paths
+    /// should keep the default sandbox-only behavior so private lesson content is
+    /// not compiled on the host by surprise.
+    pub fn with_host_cli_fallback(mut self, allow: bool) -> Self {
+        self.allow_host_cli_fallback = allow;
+        self
+    }
+
+    /// Compile Typst source to PDF via sandbox.
+    ///
+    /// Host CLI fallback is disabled by default and must be enabled explicitly
+    /// with [`TypstCompiler::with_host_cli_fallback`].
     pub async fn compile_to_pdf(
         &self,
         typst_source: &str,
@@ -29,6 +42,9 @@ impl TypstCompiler {
         match self.compile_via_sandbox(typst_source, assets).await {
             Ok(artifact) => return Ok(artifact),
             Err(sandbox_err) => {
+                if !self.allow_host_cli_fallback {
+                    return Err(sandbox_err);
+                }
                 tracing::debug!(
                     error = %sandbox_err,
                     "Sandbox compilation unavailable, trying host typst CLI"
@@ -244,4 +260,44 @@ fn parse_typst_errors(stderr: &str) -> Vec<TypstDiagnostic> {
     }
 
     diagnostics
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sandbox_manager::models::result::SandboxResult;
+    use sandbox_manager::models::status::ExecutionStatus;
+    use sandbox_manager::{MockExecutor, SandboxManager};
+
+    #[tokio::test]
+    async fn sandbox_failure_does_not_use_host_cli_by_default() {
+        let mut mock = MockExecutor::new();
+        mock.set_response_fn(Box::new(|req| SandboxResult {
+            request_id: req.request_id,
+            session_id: Some(req.session_id),
+            status: ExecutionStatus::InternalError,
+            exit_code: Some(1),
+            stdout: String::new(),
+            stderr: "sandbox compile failed".to_string(),
+            stdout_truncated: false,
+            stderr_truncated: false,
+            duration_ms: 1,
+            resource_usage: Default::default(),
+            error: None,
+        }));
+
+        let sandbox = Arc::new(SandboxManager::with_executor(Box::new(mock)));
+        let compiler = TypstCompiler::new(sandbox);
+        let err = compiler
+            .compile_to_pdf("#set page(width: 10cm)\n= Test", &HashMap::new())
+            .await
+            .expect_err("sandbox failure should be returned directly");
+
+        match err {
+            ExportError::CompilationFailed { message, .. } => {
+                assert_eq!(message, "Typst compilation failed");
+            }
+            other => panic!("expected compilation failure, got {other:?}"),
+        }
+    }
 }

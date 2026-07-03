@@ -1479,7 +1479,10 @@ async fn test_sandbox_execute_stream_success() {
 
     if status.is_success() {
         assert!(
-            text.contains("event:status")
+            text.contains("event: status")
+                || text.contains("event: done")
+                || text.contains("event: error")
+                || text.contains("event:status")
                 || text.contains("event:done")
                 || text.contains("event:error"),
             "SSE stream should contain events: {text}"

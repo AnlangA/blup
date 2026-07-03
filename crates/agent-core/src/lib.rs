@@ -5,6 +5,7 @@ pub mod api;
 pub mod error;
 pub mod server;
 pub mod state;
+pub mod tool_adapters;
 
 /// Application configuration loaded from environment variables.
 #[derive(Clone)]

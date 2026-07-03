@@ -135,6 +135,7 @@ export function useSessionPlanSync(
   session: SessionSnapshot | undefined,
 ) {
   const updatePlanMeta = useSessionStore((s) => s.updatePlanMeta);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!sessionId || !session) return;
@@ -159,7 +160,24 @@ export function useSessionPlanSync(
         domain: newDomain,
       });
     }
-  }, [sessionId, session, updatePlanMeta]);
+
+    if (session.curriculum) {
+      queryClient.setQueryData(["curriculum", sessionId], session.curriculum);
+    }
+
+    Object.entries(session.chapter_contents ?? {}).forEach(([chapterId, content]) => {
+      if (!content.trim()) return;
+      queryClient.setQueryData<ChapterContent>(
+        ["chapter", sessionId, chapterId],
+        (existing) => ({
+          id: existing?.id ?? chapterId,
+          role: existing?.role ?? "assistant",
+          content,
+          timestamp: existing?.timestamp ?? "",
+        }),
+      );
+    });
+  }, [sessionId, session, updatePlanMeta, queryClient]);
 }
 
 // ── Goal ──
@@ -291,33 +309,17 @@ export function useCurriculum(sessionId: string | null) {
 
 // ── Chapter ──
 
-export function useChapter(sessionId: string | null, chapterId: string | null) {
+export function useChapter(
+  sessionId: string | null,
+  chapterId: string | null,
+  options?: { enabled?: boolean },
+) {
   return useQuery<ChapterContent>({
     queryKey: ["chapter", sessionId, chapterId],
     queryFn: () => api.startChapter(sessionId!, chapterId!),
-    enabled: !!sessionId && !!chapterId,
+    enabled: !!sessionId && !!chapterId && (options?.enabled ?? true),
     staleTime: 30 * 60 * 1000,
   });
-}
-
-export function usePrefetchChapters(
-  sessionId: string | null,
-  chapterIds: string[],
-) {
-  const queryClient = useQueryClient();
-
-  const prefetchAll = useCallback(() => {
-    if (!sessionId) return;
-    for (const chId of chapterIds) {
-      queryClient.prefetchQuery({
-        queryKey: ["chapter", sessionId, chId],
-        queryFn: () => api.startChapter(sessionId, chId),
-        staleTime: 30 * 60 * 1000,
-      });
-    }
-  }, [queryClient, sessionId, chapterIds]);
-
-  return { prefetchAll };
 }
 
 // ── Q&A ──
