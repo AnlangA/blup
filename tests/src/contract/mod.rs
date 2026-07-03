@@ -31,21 +31,31 @@ struct RenderChecks {
 #[test]
 fn test_all_schemas_loadable() {
     let schemas = [
-        "learning_goal",
-        "feasibility_result",
-        "user_profile",
-        "curriculum_plan",
-        "chapter",
-        "message",
-        "chapter_progress",
+        ("learning_goal", "learning_goal/valid-minimal.json"),
+        (
+            "feasibility_result",
+            "feasibility_result/valid-minimal.json",
+        ),
+        ("user_profile", "user_profile/valid-complete.json"),
+        ("curriculum_plan", "curriculum_plan/valid-minimal.json"),
+        ("chapter", "chapter/valid-chapter.json"),
+        ("message", "message/valid-assistant-message.json"),
+        (
+            "chapter_progress",
+            "chapter_progress/valid-in-progress.json",
+        ),
     ];
 
     let validator = SchemaValidator::new("../schemas");
-    for name in schemas {
-        assert!(
-            validator.validate(&json!({"test": true}), name).is_ok() || true,
-            "Schema {name} should at least be loadable"
-        );
+    for (name, fixture) in schemas {
+        let path = format!("../schemas/fixtures/{fixture}");
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("Fixture {path} should be readable: {err}"));
+        let value: serde_json::Value = serde_json::from_str(&content)
+            .unwrap_or_else(|err| panic!("Fixture {path} should be valid JSON: {err}"));
+        validator
+            .validate(&value, name)
+            .unwrap_or_else(|err| panic!("Schema {name} should validate fixture {path}: {err}"));
     }
 }
 

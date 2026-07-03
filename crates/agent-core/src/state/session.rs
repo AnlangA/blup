@@ -155,7 +155,7 @@ impl InMemorySessionStore {
         let mut sessions = self.sessions.write().await;
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
-            if !path.extension().is_some_and(|e| e == "json") {
+            if path.extension().is_none_or(|e| e != "json") {
                 continue;
             }
 
